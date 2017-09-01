@@ -3,12 +3,13 @@ import sys
 import SStruct
 
 args = sys.argv
-filename = arg[2]
+filename = args[2]
 
-if args[1]=='train'
+sstruct = SStruct.SStruct(filename)
+name,seq,structure = sstruct.load_FASTA()
 
-    sstruct=SStruct.SStruct(filename)
+if args[1]=='train':
 
-elif  args[1]=='test'
+#elif args[1]=='test':
 
-else
+else:
