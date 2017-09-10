@@ -1,0 +1,15 @@
+> DS4440
+GGAUGGAUGUCUGAGCGGUUGAAAGAGUCGGUCUUGAAAACCGAAGUAUUGAUAGGAAUACCGGGGGUUCGAAUCCCUCUCCAUCCG
+(((((((..(((...........))).(((((.......))))).(((((......))))).(((((.......)))))))))))).
+> DA0680
+GGGCCCAUAGCUCAGCCUGGGAGAGCGCCGCCCUUGCAAGGCGGAGGCCCCGGGUUCAAAUCCCGGUGGGUCCA
+(((((((..((((.........)))).(((((.......))))).....(((((.......)))))))))))).
+> DH2520
+GGUGGGUGUAGCCAAGUGGUAAGGCAAAGGACUGUGACUCCUUCAUUCGCGGGUUCGAUCCCCGUCAUUCACC
+.(((((((..(((.........))).(((((.......))))).....(((((.......)))))))))))).
+> DH3240
+GGCGGAUGUAGCCAAGUGGAUUAAGGCAGUGGAUUGUGAAUUCACCAUCGCGGGUUCAAUUCCCGUCGUUCGCC
+.(((((((..(((...........))).(((((.......)))))....(((((.......)))))))))))).
+> DD5000
+AAAGAGCUAGUUAAAAAAUAACCCCAGAUUGUCAGACUGGAAUUAUCUGUAACCACCCUGAUGCUCUUU
+(((((((..((((.....)))).((((.........))))....(((.(........).))))))))))

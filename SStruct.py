@@ -13,7 +13,6 @@ class SStruct:
         structure = np.array([])
 
         while line:
-            #print(line)
             name=np.append(name,line)
             line = f.readline()
 
