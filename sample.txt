@@ -1,3 +1,6 @@
+> sample
+GGCCUAGCUA
+.().(.().)
 > DS4440
 GGAUGGAUGUCUGAGCGGUUGAAAGAGUCGGUCUUGAAAACCGAAGUAUUGAUAGGAAUACCGGGGGUUCGAAUCCCUCUCCAUCCG
 (((((((..(((...........))).(((((.......))))).(((((......))))).(((((.......)))))))))))).
