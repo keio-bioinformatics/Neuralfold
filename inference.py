@@ -53,22 +53,22 @@ class Inference:
     def traceback(self, DP, BP, i, j, pair):
         if i < j:
             if DP[i, j] == DP[i+1, j]:
-                self.traceback(DP, BP, i+1, j, pair)
+                pair = self.traceback(DP, BP, i+1, j, pair)
             elif DP[i, j] == DP[i, j-1]:
-                self.traceback(DP, BP, i, j-1, pair)
+                pair = self.traceback(DP, BP, i, j-1, pair)
             elif DP[i, j] == DP[i+1, j-1]+BP[i,j]:
                 pair = np.append(pair, [[i,j]], axis=0)
-                print(i,j)
-                self.traceback(DP, BP, i+1, j-1, pair)
+                pair = self.traceback(DP, BP, i+1, j-1, pair)
             else:
                 for k in range(i+1,j):
                     if DP[i,j] == DP[i,k]+DP[k+1,j]:
-                        self.traceback(DP, BP, i, k, pair)
-                        self.traceback(DP, BP, k+1, j, pair)
+                        pair = self.traceback(DP, BP, i, k, pair)
+                        pair = self.traceback(DP, BP, k+1, j, pair)
                         break
         return pair
 
+
     def ComputePosterior(self, BP):
         DP = self.buildDP(BP)
-        pair = self.traceback(DP, BP, 0, self.N-1, np.array([]) )
+        pair = self.traceback(DP, BP, 0, self.N-1, np.empty((0,2)) )
         return pair
