@@ -28,6 +28,7 @@ class Inference:
         #FM=initializeFM()
         return BP
 
+
     def buildDP(self, BP):
         DP = np.zeros((self.N,self.N))
         for n in range(1,self.N):
