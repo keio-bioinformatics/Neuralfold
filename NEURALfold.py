@@ -2,6 +2,7 @@ import numpy as np
 import sys
 import SStruct
 import Inference
+import Evaluate
 args = sys.argv
 filename = args[2]
 
@@ -16,5 +17,7 @@ if args[1]=='train':
         predicted_structure = inference.ComputePosterior(BP)
         print(predicted_structure)
 #elif args[1]=='test':
+    evaluate = Evaluate.Evaluate(predicted_structures , true_structures)
+    Accuracy,PPV,F_value = evaluate.getscore()
 
 #else:

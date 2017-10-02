@@ -23,4 +23,5 @@ class SStruct:
             line = f.readline()
 
         f.close()
+        
         return name,seq,structure
