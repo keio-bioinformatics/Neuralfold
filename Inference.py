@@ -1,6 +1,33 @@
 import numpy as np
 import Config
+#import Recursive
+import chainer.links as L
+import chainer.functions as F
+#import chainer
+from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
+
 min_loop_length = Config.min_loop_length
+FEATURE_SIZE = Config.feature_length
+
+
+class Recursive_net(chainer.Chain):
+
+    def __init__(self, n_mid_units=100, n_out=10):
+        # パラメータを持つ層の登録
+        super(Recursive_net, self).__init__(
+            l1 = L.Linear(None , feature_length),
+            l2 = L.Linear(None , 1)
+        )
+
+    def __call__(self, x , inner = True):
+        # データを受け取った際のforward計算を書く
+        if inner:
+            h = F.relu(self.l1(x))
+        else:
+            h = F.relu(self.l2(x))
+        return h
+
+
 class Inference:
     def __init__(self, seq):
         self.seq=seq
@@ -23,9 +50,46 @@ class Inference:
             return True
         return False
 
+    def base_represent(self,base):
+        if base == 'A'
+
+
     def ComputeInsideOutside(self):
-        BP = self.initializeBP()
-        #FM=initializeFM()
+
+        #BP = self.initializeBP()
+        BP = np.zeros((self.N,self.N))
+
+
+        #define feature matrix
+        FM_inside = np.empty((self.N , self.N , FEATURE_SIZE))
+        FM_outside = np.empty((self.N , self.N , FEATURE_SIZE))
+
+        #define model
+        model = Recursive_net()
+        optimizer = chainer.optimizer
+        optimizer.setup(model)
+
+        #compute inside
+        for n in range(1,self.N):
+            for j in range(n,self.N):
+                i = j-n
+                x = F.concat((FM_inside[i,j-1] , FM_inside[i+1,j-1] , FM_inside[i+1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j]) ,axis=1)
+                FM_inside[i,j] = model(x)
+
+        #compute outside
+        for n in range(self.N-1 , 1-1 , -1):
+            for j in range(self.N-1 , n-1 , -1):
+                i = j-n
+                x = F.concat((FM_inside[i,j+1] , FM_inside[i-1,j+1] , FM_inside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j]) ,axis=1)
+                FM_outside[i,j] = model(x)
+
+        #marge inside outside
+        for n in range(1,self.N):
+            for j in range(n,self.N):
+                i = j-n
+                x = F.concat((FM_inside[i , j] , FM_outside[i , j]) ,axis=1)
+                BP[i,j] = model(x , inner = False)
+
         return BP
 
 
