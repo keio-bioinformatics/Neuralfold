@@ -21,7 +21,7 @@ class Recursive_net(chainer.Chain):
 
     def __call__(self, x , inner = True):
         # データを受け取った際のforward計算を書く
-        if inner:
+        if(inner):
             h = F.relu(self.l1(x))
         else:
             h = F.relu(self.l2(x))
@@ -54,33 +54,33 @@ class Inference:
         if base == 'A'
 
 
-    def ComputeInsideOutside(self):
+    def ComputeInsideOutside(self, model):
 
         #BP = self.initializeBP()
         BP = np.zeros((self.N,self.N))
 
 
         #define feature matrix
-        FM_inside = np.empty((self.N , self.N , FEATURE_SIZE))
-        FM_outside = np.empty((self.N , self.N , FEATURE_SIZE))
+        FM_inside = np.zeros((self.N , self.N , FEATURE_SIZE))
+        FM_outside = np.zeros((self.N , self.N , FEATURE_SIZE))
 
         #define model
-        model = Recursive_net()
-        optimizer = chainer.optimizer
-        optimizer.setup(model)
+        # model = Recursive_net()
+        # optimizer = chainer.optimizer
+        # optimizer.setup(model)
 
         #compute inside
         for n in range(1,self.N):
             for j in range(n,self.N):
                 i = j-n
-                x = F.concat((FM_inside[i,j-1] , FM_inside[i+1,j-1] , FM_inside[i+1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j]) ,axis=1)
+                x = F.concat((FM_inside[i,j-1] , FM_inside[i+1,j-1] , FM_inside[i+1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
                 FM_inside[i,j] = model(x)
 
         #compute outside
         for n in range(self.N-1 , 1-1 , -1):
             for j in range(self.N-1 , n-1 , -1):
                 i = j-n
-                x = F.concat((FM_inside[i,j+1] , FM_inside[i-1,j+1] , FM_inside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j]) ,axis=1)
+                x = F.concat((FM_inside[i,j+1] , FM_inside[i-1,j+1] , FM_inside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
                 FM_outside[i,j] = model(x)
 
         #marge inside outside
