@@ -7,7 +7,7 @@ args = sys.argv
 filename = args[2]
 
 sstruct = SStruct.SStruct(filename)
-name,seq,structure = sstruct.load_FASTA()
+name_set,seq_set,structure_set = sstruct.load_FASTA()
 print(name,seq,structure)
 
 if args[1]=='train':

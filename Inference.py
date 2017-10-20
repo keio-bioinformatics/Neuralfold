@@ -61,9 +61,9 @@ class Inference:
 
 
         #define feature matrix
-        FM_inside = np.zeros((self.N , self.N , FEATURE_SIZE))
-        FM_outside = np.zeros((self.N , self.N , FEATURE_SIZE))
-
+        FM_inside = Variable(np.zeros((self.N , self.N , FEATURE_SIZE)) , dtype=np.float32)
+        FM_outside = Variable(np.zeros((self.N , self.N , FEATURE_SIZE)), dtype=np.float32)
+        zero_vector = Variable(np.zeros((1,FEATURE_SIZE)), dtype=np.float32)
         #define model
         # model = Recursive_net()
         # optimizer = chainer.optimizer
@@ -80,7 +80,15 @@ class Inference:
         for n in range(self.N-1 , 1-1 , -1):
             for j in range(self.N-1 , n-1 , -1):
                 i = j-n
-                x = F.concat((FM_inside[i,j+1] , FM_inside[i-1,j+1] , FM_inside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                if i == 0 and j ==　self.N-1:
+                    x = F.concat((zero_vector , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                elif i ==0:
+                    x = F.concat((FM_outside[i,j+1] , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                elif j == self.N-1:
+                    x = F.concat((zero_vector , zero_vector , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                else:
+                    x = F.concat((FM_outside[i,j+1] , FM_outside[i-1,j+1] , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+
                 FM_outside[i,j] = model(x)
 
         #marge inside outside

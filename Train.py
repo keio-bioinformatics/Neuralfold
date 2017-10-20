@@ -20,5 +20,5 @@ class Train:
         optimizer.setup(model)
 
         for seq, structure in zip(self.seq_set, self.structure_set):
-            inference = Inference.Inference(s)
+            inference = Inference.Inference(seq)
             predicted_BP = inference.ComputeInsideOutside(model)
