@@ -45,6 +45,8 @@ class Train:
                     y = F.softmax(predicted_BP[true_pair[0],true_pair[1]])
                     loss += F.softmax_cross_entropy(y,1)
 
+                model.zerograds()
                 loss.backward()
+                optimizer.update()
 
         return model

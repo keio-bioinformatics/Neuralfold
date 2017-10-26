@@ -89,7 +89,7 @@ class Inference:
                 a = i-1
                 b = j+1
                 if i == 0:
-                    a == self.N-1
+                    a = self.N-1
                 elif j == self.N-1:
                     b = 0
 
