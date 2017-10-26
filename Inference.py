@@ -51,8 +51,14 @@ class Inference:
         return False
 
     def base_represent(self,base):
-        if base == 'A'
-
+        if base == 'A' or base == 'a':
+            return Variable(np.array([[1,0,0,0]] , dtype=np.float32)
+        if base == 'U' or base == 'u':
+            return Variable(np.array([[0,1,0,0]] , dtype=np.float32)
+        if base == 'G' or base == 'g':
+            return Variable(np.array([[0,0,1,0]] , dtype=np.float32)
+        if base == 'C' or base == 'c':
+            return Variable(np.array([[0,0,0,1]] , dtype=np.float32)
 
     def ComputeInsideOutside(self, model):
 
@@ -80,14 +86,23 @@ class Inference:
         for n in range(self.N-1 , 1-1 , -1):
             for j in range(self.N-1 , n-1 , -1):
                 i = j-n
-                if i == 0 and j ==　self.N-1:
-                    x = F.concat((zero_vector , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
-                elif i ==0:
-                    x = F.concat((FM_outside[i,j+1] , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                a = i-1
+                b = j+1
+                if i == 0:
+                    a == self.N-1
                 elif j == self.N-1:
-                    x = F.concat((zero_vector , zero_vector , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
-                else:
-                    x = F.concat((FM_outside[i,j+1] , FM_outside[i-1,j+1] , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                    b = 0
+
+                x = F.concat((FM_outside[i,b] , FM_outside[a,b] , FM_outside[a,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+
+                # if i == 0 and j ==　self.N-1:
+                #     x = F.concat((zero_vector , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                # elif i ==0:
+                #     x = F.concat((FM_outside[i,j+1] , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                # elif j == self.N-1:
+                #     x = F.concat((zero_vector , zero_vector , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                # else:
+                #     x = F.concat((FM_outside[i,j+1] , FM_outside[i-1,j+1] , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
 
                 FM_outside[i,j] = model(x)
 
