@@ -36,14 +36,15 @@ class Train:
                         j+=1
                     i+=1
 
-
+                loss = 0
                 #backprop
                 for predicted_pair in predicted_structure:
-                    loss =
-                    predicted_BP[predicted_pair[0],predicted_pair[1]]
-                    loss.backward()
+                    y = F.softmax(predicted_BP[predicted_pair[0],predicted_pair[1]])
+                    loss += F.softmax_cross_entropy(y,0)
                 for true_pair in true_structure:
-                    loss = predicted_BP[true_pair[0],true_pair[1]]
-                    loss.backward()
+                    y = F.softmax(predicted_BP[true_pair[0],true_pair[1]])
+                    loss += F.softmax_cross_entropy(y,1)
+
+                loss.backward()
 
         return model

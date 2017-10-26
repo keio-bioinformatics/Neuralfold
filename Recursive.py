@@ -20,5 +20,5 @@ class Recursive_net(chainer.Chain):
         if inner:
             h = F.relu(self.l1(x))
         else:
-            h = F.relu(self.l2(x))
+            h = F.sigmoid(self.l2(x))
         return h

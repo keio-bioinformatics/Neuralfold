@@ -26,5 +26,6 @@ elif args[1] == 'test':
     evaluate = Evaluate.Evaluate(predicted_structure_set , structure_set)
     Sensitivity, PPV, F_value = evaluate.getscore()
 
-
+else:
+    print("input train or test")
 #else:
