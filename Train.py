@@ -13,13 +13,14 @@ class Train:
         self.seq_set = seq_set
         self.structure_set = structure_set
 
-    def train():
+    def train(self):
         #define model
         model = Recursive.Recursive_net()
         optimizer = optimizers.Adam()
         optimizer.setup(model)
 
         for ite in range(iters_num):
+            print('ite = ' +  str(ite))
             for seq, true_structure in zip(self.seq_set, self.structure_set):
                 inference = Inference.Inference(seq)
                 predicted_BP = inference.ComputeInsideOutside(model)
@@ -29,7 +30,8 @@ class Train:
                 for predicted_pair in predicted_structure:
                     j = 0
                     for true_pair in true_structure:
-                        if predicted_pair == true_pair:
+                        print(predicted_pair, true_pair)
+                        if all(predicted_pair == true_pair):
                             np.delete(predicted_structure,i,0)
                             np.delete(true_structure,j,0)
                             break
@@ -37,13 +39,17 @@ class Train:
                     i+=1
 
                 loss = 0
+                t = Variable(np.array([[0]], dtype=np.float32))
+                t2 = Variable(np.array([[1]], dtype=np.float32))
+
                 #backprop
                 for predicted_pair in predicted_structure:
-                    y = F.softmax(predicted_BP[predicted_pair[0],predicted_pair[1]])
-                    loss += F.softmax_cross_entropy(y,0)
+                    print(predicted_pair[0])
+                    y = predicted_BP[predicted_pair[0]][predicted_pair[1]]
+                    loss += F.mean_squared_error(y, t)
                 for true_pair in true_structure:
-                    y = F.softmax(predicted_BP[true_pair[0],true_pair[1]])
-                    loss += F.softmax_cross_entropy(y,1)
+                    y = predicted_BP[true_pair[0]][true_pair[1]]
+                    loss += F.mean_squared_error(y, t2)
 
                 model.zerograds()
                 loss.backward()

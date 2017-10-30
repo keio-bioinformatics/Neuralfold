@@ -6,9 +6,10 @@ import chainer.functions as F
 #import chainer
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 
-class Recursive_net(chainer.Chain):
+feature_length = Config.feature_length
+class Recursive_net(Chain):
 
-    def __init__(self, n_mid_units=100, n_out=10):
+    def __init__(self):
         # パラメータを持つ層の登録
         super(Recursive_net, self).__init__(
             l1 = L.Linear(None , feature_length),

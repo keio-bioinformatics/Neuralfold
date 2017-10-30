@@ -1,49 +1,16 @@
 import numpy as np
 import Config
-#import Recursive
 import chainer.links as L
 import chainer.functions as F
-#import chainer
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 
 min_loop_length = Config.min_loop_length
 FEATURE_SIZE = Config.feature_length
 
-
-class Recursive_net(chainer.Chain):
-
-    def __init__(self, n_mid_units=100, n_out=10):
-        # パラメータを持つ層の登録
-        super(Recursive_net, self).__init__(
-            l1 = L.Linear(None , feature_length),
-            l2 = L.Linear(None , 1)
-        )
-
-    def __call__(self, x , inner = True):
-        # データを受け取った際のforward計算を書く
-        if(inner):
-            h = F.relu(self.l1(x))
-        else:
-            h = F.relu(self.l2(x))
-        return h
-
-
 class Inference:
     def __init__(self, seq):
         self.seq=seq
         self.N=len(self.seq)
-    #initialize matrix with zeros where can't have pairings
-    def initializeBP(self):
-        #NxN matrix that stores the BaseParing probability
-        #     BP = np.empty((self.N,self.N))
-        #     BP[:] = np.NAN
-        #BP = np.zeros((self.N,self.N))
-        BP = np.random.rand(self.N,self.N)
-        return BP
-
-
-    #initialize Feature matrix
-    #def initializeFM(self):
 
     def pair_check(self,tup):
         if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
@@ -51,36 +18,37 @@ class Inference:
         return False
 
     def base_represent(self,base):
-        if base == 'A' or base == 'a':
-            return Variable(np.array([[1,0,0,0]] , dtype=np.float32)
-        if base == 'U' or base == 'u':
-            return Variable(np.array([[0,1,0,0]] , dtype=np.float32)
-        if base == 'G' or base == 'g':
-            return Variable(np.array([[0,0,1,0]] , dtype=np.float32)
-        if base == 'C' or base == 'c':
-            return Variable(np.array([[0,0,0,1]] , dtype=np.float32)
+        if base in ['A' ,'a']:
+            return Variable(np.array([[1,0,0,0]] , dtype=np.float32))
+        elif base in ['U' ,'u']:
+            return Variable(np.array([[0,1,0,0]] , dtype=np.float32))
+        elif base in ['G' ,'g']:
+            return Variable(np.array([[0,0,1,0]] , dtype=np.float32))
+        elif base in ['C' ,'c']:
+            return Variable(np.array([[0,0,0,1]] , dtype=np.float32))
+        else:
+            print("error")
+            return Variable(np.array([[0,0,0,0]] , dtype=np.float32))
 
     def ComputeInsideOutside(self, model):
 
-        #BP = self.initializeBP()
-        BP = np.zeros((self.N,self.N))
-
+        BP = [[0 for i in range(self.N)] for j in range(self.N)]
 
         #define feature matrix
-        FM_inside = Variable(np.zeros((self.N , self.N , FEATURE_SIZE)) , dtype=np.float32)
-        FM_outside = Variable(np.zeros((self.N , self.N , FEATURE_SIZE)), dtype=np.float32)
-        zero_vector = Variable(np.zeros((1,FEATURE_SIZE)), dtype=np.float32)
-        #define model
-        # model = Recursive_net()
-        # optimizer = chainer.optimizer
-        # optimizer.setup(model)
+        # FM_inside = Variable(np.zeros((self.N, self.N, FEATURE_SIZE), dtype=np.float32))
+        # FM_outside = Variable(np.zeros((self.N, self.N, FEATURE_SIZE), dtype=np.float32))
+        FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+
+        #zero_vector = Variable(np.zeros((1,FEATURE_SIZE)), dtype=np.float32)
 
         #compute inside
         for n in range(1,self.N):
             for j in range(n,self.N):
                 i = j-n
-                x = F.concat((FM_inside[i,j-1] , FM_inside[i+1,j-1] , FM_inside[i+1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
-                FM_inside[i,j] = model(x)
+                #print(FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j]))
+                x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                FM_inside[i][j] = model(x)
 
         #compute outside
         for n in range(self.N-1 , 1-1 , -1):
@@ -90,10 +58,10 @@ class Inference:
                 b = j+1
                 if i == 0:
                     a = self.N-1
-                elif j == self.N-1:
+                if j == self.N-1:
                     b = 0
-
-                x = F.concat((FM_outside[i,b] , FM_outside[a,b] , FM_outside[a,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
+                #print(i,j,a,b)
+                x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
 
                 # if i == 0 and j ==　self.N-1:
                 #     x = F.concat((zero_vector , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
@@ -104,17 +72,16 @@ class Inference:
                 # else:
                 #     x = F.concat((FM_outside[i,j+1] , FM_outside[i-1,j+1] , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
 
-                FM_outside[i,j] = model(x)
+                FM_outside[i][j] = model(x)
 
         #marge inside outside
         for n in range(1,self.N):
             for j in range(n,self.N):
                 i = j-n
-                x = F.concat((FM_inside[i , j] , FM_outside[i , j]) ,axis=1)
-                BP[i,j] = model(x , inner = False)
+                x = F.concat((FM_inside[i][j] , FM_outside[i][j]) ,axis=1)
+                BP[i][j] = model(x , inner = False)
 
         return BP
-
 
     def buildDP(self, BP):
         DP = np.zeros((self.N,self.N))
@@ -123,7 +90,7 @@ class Inference:
                 i = j-n
                 if self.pair_check((self.seq[i], self.seq[j])):
                     #print('A')
-                    case1 = DP[i+1,j-1]+BP[i,j]
+                    case1 = DP[i+1,j-1] + BP[i][j].data
                 else:
                     case1 = -100
                 case2 = DP[i+1,j]
@@ -131,7 +98,7 @@ class Inference:
                 if i+3<=j:
                     tmp=np.array([])
                     for k in range(i+1,j):
-                        tmp = np.append(tmp , DP[i,k]+DP[k+1,j])
+                        tmp = np.append(tmp , DP[i,k] + DP[k+1,j])
                     case4 = np.max(tmp)
                     DP[i,j] = max(case1,case2,case3,case4)
                 else:
@@ -144,7 +111,7 @@ class Inference:
                 pair = self.traceback(DP, BP, i+1, j, pair)
             elif DP[i, j] == DP[i, j-1]:
                 pair = self.traceback(DP, BP, i, j-1, pair)
-            elif DP[i, j] == DP[i+1, j-1]+BP[i,j]:
+            elif DP[i, j] == DP[i+1, j-1]+BP[i][j].data:
                 pair = np.append(pair, [[i,j]], axis=0)
                 pair = self.traceback(DP, BP, i+1, j-1, pair)
             else:

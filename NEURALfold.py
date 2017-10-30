@@ -1,8 +1,8 @@
 import numpy as np
 import sys
 import SStruct
-#import Inference
-#import Evaluate
+import Inference
+import Evaluate
 import Train
 import Test
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
