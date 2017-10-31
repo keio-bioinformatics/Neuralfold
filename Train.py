@@ -4,6 +4,7 @@ import Recursive
 import chainer.links as L
 import chainer.functions as F
 import Inference
+from tqdm import tqdm
 #import chainer
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 iters_num = Config.iters_num
@@ -21,7 +22,8 @@ class Train:
 
         for ite in range(iters_num):
             print('ite = ' +  str(ite))
-            for seq, true_structure in zip(self.seq_set, self.structure_set):
+            for seq, true_structure in zip(tqdm(self.seq_set), self.structure_set):
+
                 inference = Inference.Inference(seq)
                 predicted_BP = inference.ComputeInsideOutside(model)
                 predicted_structure = inference.ComputePosterior(predicted_BP)
@@ -30,8 +32,7 @@ class Train:
                 for predicted_pair in predicted_structure:
                     j = 0
                     for true_pair in true_structure:
-                        print(predicted_pair, true_pair)
-                        if all(predicted_pair == true_pair):
+                        if (predicted_pair == true_pair).all():
                             np.delete(predicted_structure,i,0)
                             np.delete(true_structure,j,0)
                             break
@@ -44,7 +45,6 @@ class Train:
 
                 #backprop
                 for predicted_pair in predicted_structure:
-                    print(predicted_pair[0])
                     y = predicted_BP[predicted_pair[0]][predicted_pair[1]]
                     loss += F.mean_squared_error(y, t)
                 for true_pair in true_structure:

@@ -20,8 +20,8 @@ class SStruct:
             line = f.readline()
 
             i=0
-            stack = np.array([])
-            structure = np.empty((0, 2))
+            stack = np.array([],dtype=np.int16)
+            structure = np.empty((0, 2),dtype=np.int16)
             for a in line:
                 if a == "(":
                     stack = np.append(stack , i)

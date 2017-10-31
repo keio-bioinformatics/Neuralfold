@@ -6,6 +6,7 @@ from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 
 min_loop_length = Config.min_loop_length
 FEATURE_SIZE = Config.feature_length
+bifurcation = Config.bifurcation
 
 class Inference:
     def __init__(self, seq):
@@ -35,19 +36,18 @@ class Inference:
         BP = [[0 for i in range(self.N)] for j in range(self.N)]
 
         #define feature matrix
-        # FM_inside = Variable(np.zeros((self.N, self.N, FEATURE_SIZE), dtype=np.float32))
-        # FM_outside = Variable(np.zeros((self.N, self.N, FEATURE_SIZE), dtype=np.float32))
         FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
         FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
 
-        #zero_vector = Variable(np.zeros((1,FEATURE_SIZE)), dtype=np.float32)
 
         #compute inside
         for n in range(1,self.N):
             for j in range(n,self.N):
                 i = j-n
-                #print(FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j]))
                 x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                #if bifurcation:
+
+
                 FM_inside[i][j] = model(x)
 
         #compute outside
@@ -62,16 +62,6 @@ class Inference:
                     b = 0
                 #print(i,j,a,b)
                 x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-
-                # if i == 0 and j ==　self.N-1:
-                #     x = F.concat((zero_vector , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
-                # elif i ==0:
-                #     x = F.concat((FM_outside[i,j+1] , zero_vector , zero_vector , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
-                # elif j == self.N-1:
-                #     x = F.concat((zero_vector , zero_vector , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
-                # else:
-                #     x = F.concat((FM_outside[i,j+1] , FM_outside[i-1,j+1] , FM_outside[i-1,j] , base_represent(self.seq[i]) , base_represent(self.seq[j])) ,axis=1)
-
                 FM_outside[i][j] = model(x)
 
         #marge inside outside
@@ -88,8 +78,7 @@ class Inference:
         for n in range(1,self.N):
             for j in range(n,self.N):
                 i = j-n
-                if self.pair_check((self.seq[i], self.seq[j])):
-                    #print('A')
+                if self.pair_check((self.seq[i].upper(), self.seq[j].upper())):
                     case1 = DP[i+1,j-1] + BP[i][j].data
                 else:
                     case1 = -100
@@ -125,5 +114,5 @@ class Inference:
 
     def ComputePosterior(self, BP):
         DP = self.buildDP(BP)
-        pair = self.traceback(DP, BP, 0, self.N-1, np.empty((0,2)) )
+        pair = self.traceback(DP, BP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
         return pair
