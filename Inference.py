@@ -3,10 +3,12 @@ import Config
 import chainer.links as L
 import chainer.functions as F
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
+from joblib import Parallel, delayed
 
 min_loop_length = Config.min_loop_length
 FEATURE_SIZE = Config.feature_length
 bifurcation = Config.bifurcation
+PARALLEL = Config.Parallel
 
 class Inference:
     def __init__(self, seq):
@@ -31,6 +33,21 @@ class Inference:
             print("error")
             return Variable(np.array([[0,0,0,0]] , dtype=np.float32))
 
+    def ComputeInside_Parallel(self, i, j, model, FM_inside):
+        x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+        return model(x)
+
+    def ComputeOutside_Parallel(self, i, j, model, FM_outside):
+        a = i-1
+        b = j+1
+        if i == 0:
+            a = self.N-1
+        if j == self.N-1:
+            b = 0
+        #print(i,j,a,b)
+        x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+        return model(x)
+
     def ComputeInsideOutside(self, model):
 
         BP = [[0 for i in range(self.N)] for j in range(self.N)]
@@ -42,27 +59,38 @@ class Inference:
 
         #compute inside
         for n in range(1,self.N):
-            for j in range(n,self.N):
-                i = j-n
-                x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-                #if bifurcation:
+            #Parallel
+            if PARALLEL == True:
+                r =  Parallel(n_jobs=-1)([delayed(self.ComputeInside_Parallel)(j-n, j, model,FM_inside) for j in range(n,self.N)])
+                for j in range(n,self.N):
+                    FM_inside[j-n][j] = r.pop(0)
 
 
-                FM_inside[i][j] = model(x)
+            else:
+                for j in range(n,self.N):
+                    i = j-n
+                    x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                    FM_inside[i][j] = model(x)
 
         #compute outside
         for n in range(self.N-1 , 1-1 , -1):
-            for j in range(self.N-1 , n-1 , -1):
-                i = j-n
-                a = i-1
-                b = j+1
-                if i == 0:
-                    a = self.N-1
-                if j == self.N-1:
-                    b = 0
-                #print(i,j,a,b)
-                x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-                FM_outside[i][j] = model(x)
+            if PARALLEL == True:
+                r =  Parallel(n_jobs=-1)([delayed(self.ComputeOutside_Parallel)(j-n, j, model,FM_inside) for j in range(self.N-1 , n-1 , -1)])
+                for j in range(self.N-1 , n-1 , -1):
+                    FM_outside[j-n][j] = r.pop(0)
+
+            else:
+                for j in range(self.N-1 , n-1 , -1):
+                    i = j-n
+                    a = i-1
+                    b = j+1
+                    if i == 0:
+                        a = self.N-1
+                    if j == self.N-1:
+                        b = 0
+                    #print(i,j,a,b)
+                    x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                    FM_outside[i][j] = model(x)
 
         #marge inside outside
         for n in range(1,self.N):

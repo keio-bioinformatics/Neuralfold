@@ -5,6 +5,7 @@ import chainer.links as L
 import chainer.functions as F
 import Inference
 from tqdm import tqdm
+from time import time
 #import chainer
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 iters_num = Config.iters_num
@@ -21,6 +22,7 @@ class Train:
         optimizer.setup(model)
 
         for ite in range(iters_num):
+            start = time()
             print('ite = ' +  str(ite))
             for seq, true_structure in zip(tqdm(self.seq_set), self.structure_set):
 
@@ -54,5 +56,6 @@ class Train:
                 model.zerograds()
                 loss.backward()
                 optimizer.update()
+            print('it cost {}sec'.format(time() - start))
 
         return model

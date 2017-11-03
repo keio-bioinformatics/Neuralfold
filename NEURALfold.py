@@ -12,7 +12,7 @@ filename = args[2]
 
 sstruct = SStruct.SStruct(filename)
 name_set,seq_set,structure_set = sstruct.load_FASTA()
-print(name_set, seq_set, structure_set)
+#print(name_set, seq_set, structure_set)
 
 if args[1] == 'train':
     print("start training...")
