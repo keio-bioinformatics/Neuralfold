@@ -9,6 +9,7 @@ min_loop_length = Config.min_loop_length
 FEATURE_SIZE = Config.feature_length
 bifurcation = Config.bifurcation
 PARALLEL = Config.Parallel
+gpu = Config.gpu
 
 class Inference:
     def __init__(self, seq):
@@ -21,17 +22,32 @@ class Inference:
         return False
 
     def base_represent(self,base):
-        if base in ['A' ,'a']:
-            return Variable(np.array([[1,0,0,0]] , dtype=np.float32))
-        elif base in ['U' ,'u']:
-            return Variable(np.array([[0,1,0,0]] , dtype=np.float32))
-        elif base in ['G' ,'g']:
-            return Variable(np.array([[0,0,1,0]] , dtype=np.float32))
-        elif base in ['C' ,'c']:
-            return Variable(np.array([[0,0,0,1]] , dtype=np.float32))
+        if gpu == True:
+            print("gpu")
+            # xp = cuda.cupy
+            # if base in ['A' ,'a']:
+            #     return Variable(xp.array([[1,0,0,0]] , dtype=np.float32))
+            # elif base in ['U' ,'u']:
+            #     return Variable(xp.array([[0,1,0,0]] , dtype=np.float32))
+            # elif base in ['G' ,'g']:
+            #     return Variable(xp.array([[0,0,1,0]] , dtype=np.float32))
+            # elif base in ['C' ,'c']:
+            #     return Variable(xp.array([[0,0,0,1]] , dtype=np.float32))
+            # else:
+            #     print("error")
+            #     return Variable(xp.array([[0,0,0,0]] , dtype=np.float32))
         else:
-            print("error")
-            return Variable(np.array([[0,0,0,0]] , dtype=np.float32))
+            if base in ['A' ,'a']:
+                return Variable(np.array([[1,0,0,0]] , dtype=np.float32))
+            elif base in ['U' ,'u']:
+                return Variable(np.array([[0,1,0,0]] , dtype=np.float32))
+            elif base in ['G' ,'g']:
+                return Variable(np.array([[0,0,1,0]] , dtype=np.float32))
+            elif base in ['C' ,'c']:
+                return Variable(np.array([[0,0,0,1]] , dtype=np.float32))
+            else:
+                print("error")
+                return Variable(np.array([[0,0,0,0]] , dtype=np.float32))
 
     def ComputeInside_Parallel(self, i, j, model, FM_inside):
         x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
@@ -44,7 +60,6 @@ class Inference:
             a = self.N-1
         if j == self.N-1:
             b = 0
-        #print(i,j,a,b)
         x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
         return model(x)
 
@@ -52,15 +67,29 @@ class Inference:
 
         BP = [[0 for i in range(self.N)] for j in range(self.N)]
 
+
+        # gpu_device = 0
+        # cuda.get_device(gpu_device).use()
+        # model.to_gpu(gpu_device)
+        # xp = cuda.cupy
+
+
         #define feature matrix
-        FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #use gpu
+        if gpu == True:
+            print("gpu")
+            # FM_inside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+            # FM_outside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #use cpu
+        else:
+            FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+            FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
 
 
         #compute inside
         for n in range(1,self.N):
             #Parallel
-            if PARALLEL == True:
+            if PARALLEL == True and self.N-n > 200:
                 r =  Parallel(n_jobs=-1)([delayed(self.ComputeInside_Parallel)(j-n, j, model,FM_inside) for j in range(n,self.N)])
                 for j in range(n,self.N):
                     FM_inside[j-n][j] = r.pop(0)
@@ -74,7 +103,7 @@ class Inference:
 
         #compute outside
         for n in range(self.N-1 , 1-1 , -1):
-            if PARALLEL == True:
+            if PARALLEL == True and self.N-n > 200:
                 r =  Parallel(n_jobs=-1)([delayed(self.ComputeOutside_Parallel)(j-n, j, model,FM_inside) for j in range(self.N-1 , n-1 , -1)])
                 for j in range(self.N-1 , n-1 , -1):
                     FM_outside[j-n][j] = r.pop(0)
@@ -109,11 +138,11 @@ class Inference:
                 if self.pair_check((self.seq[i].upper(), self.seq[j].upper())):
                     case1 = DP[i+1,j-1] + BP[i][j].data
                 else:
-                    case1 = -100
+                    case1 = -1000
                 case2 = DP[i+1,j]
                 case3 = DP[i,j-1]
                 if i+3<=j:
-                    tmp=np.array([])
+                    tmp = np.array([])
                     for k in range(i+1,j):
                         tmp = np.append(tmp , DP[i,k] + DP[k+1,j])
                     case4 = np.max(tmp)
