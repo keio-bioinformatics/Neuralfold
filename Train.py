@@ -36,8 +36,8 @@ class Train:
             start = time()
             for seq, true_structure in zip(tqdm(seq_set), structure_set):
 
-                inference = Inference.Inference(seq)
-                predicted_BP = inference.ComputeInsideOutside(model)
+                inference = Inference.Inference(seq, model)
+                predicted_BP = inference.ComputeInsideOutside()
                 predicted_structure = inference.ComputePosterior(predicted_BP)
 
                 i = 0

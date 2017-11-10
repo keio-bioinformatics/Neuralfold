@@ -1,9 +1,9 @@
 min_loop_length = 0
 feature_length = 50
-iters_num = 10
+iters_num = 1
 bifurcation = False
-#Parallel = True
+# Parallel = True
 Parallel = False
 gpu = False
-TEST = True
+TEST = False
 hidden = 60
