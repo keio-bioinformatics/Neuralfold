@@ -17,7 +17,7 @@ class Test:
         serializers.load_npz("NEURALfold_params.data", model)
         predicted_structure_set = []
         for seq, true_structure in zip(self.seq_set, self.structure_set):
-            inference = Inference.Inference(seq, model)
-            predicted_BP = inference.ComputeInsideOutside()
+            inference = Inference.Inference(seq)
+            predicted_BP = inference.ComputeInsideOutside(model)
             predicted_structure_set.append(inference.ComputePosterior(predicted_BP))
         return predicted_structure_set

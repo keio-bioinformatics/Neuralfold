@@ -4,6 +4,9 @@ import chainer.links as L
 import chainer.functions as F
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 from joblib import Parallel, delayed
+from multiprocessing import Pool
+import multiprocessing as multi
+
 
 min_loop_length = Config.min_loop_length
 FEATURE_SIZE = Config.feature_length
@@ -12,12 +15,11 @@ PARALLEL = Config.Parallel
 gpu = Config.gpu
 
 class Inference:
-    def __init__(self, seq, model):
+    def __init__(self, seq):
         self.seq=seq
         self.N=len(self.seq)
-        self.FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        self.FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        self.model =model
+        # FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        # FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
 
     def pair_check(self,tup):
         if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
@@ -52,25 +54,32 @@ class Inference:
                 print("error")
                 return Variable(np.array([[0,0,0,0]] , dtype=np.float32))
 
-    def ComputeInside_Parallel(self, i, j):
-        # print("inside"+str(i)+str(j))
-        x = F.concat((self.FM_inside[i][j-1] , self.FM_inside[i+1][j-1] , self.FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        return self.model(x)
+    def ComputeInside_Parallel(self, i, j, inside1, inside2, inside3):
+        # x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+        x = F.concat((inside1, inside2, inside3, self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+        return Inference.model(x)
 
-    def ComputeOutside_Parallel(self, i, j):
-        # print("outside"+str(i)+str(j))
-        a = i-1
-        b = j+1
-        if i == 0:
-            a = self.N-1
-        if j == self.N-1:
-            b = 0
-        x = F.concat((self.FM_outside[i][b] , self.FM_outside[a][b] , self.FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        return self.model(x)
+    def ComputeOutside_Parallel(self, i, j, outside1, outside2, outside3):
+        # a = i-1
+        # b = j+1
+        # if i == 0:
+        #     a = self.N-1
+        # if j == self.N-1:
+        #     b = 0
+        x = F.concat((outside1, outside2, outside3, self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+        return Inference.model(x)
 
-    def ComputeInsideOutside(self):
+    def wrapper_inside(self,args):
+        return self.ComputeInside_Parallel(*args)
 
+    def wrapper_outside(self,args):
+        return self.ComputeOutside_Parallel(*args)
+
+    def ComputeInsideOutside(self, model):
+        Inference.model = model
         BP = [[0 for i in range(self.N)] for j in range(self.N)]
+        FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
 
 
         # gpu_device = 0
@@ -78,41 +87,66 @@ class Inference:
         # model.to_gpu(gpu_device)
         # xp = cuda.cupy
 
-
         #define feature matrix
         #use gpu
         # if gpu == True:
         #     print("gpu")
-        #     # self.FM_inside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        #     # self.FM_outside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #     # FM_inside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #     # FM_outside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
         # #use cpu
         # else:
-        #     self.FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        #     self.FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #     FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #     FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
 
+        print(multi.cpu_count())
 
         #compute inside
         for n in range(1,self.N):
+            # print("koko"+str(n))
             #Parallel
-            if PARALLEL == True and self.N-n > 0:
-                r =  Parallel(n_jobs=-1)([delayed(self.ComputeInside_Parallel)(j-n, j) for j in range(n,self.N)])
+            if PARALLEL == True and self.N-n > 50:
+            #     if self.N-n > multi.cpu_count():
+            #         p = Pool(multi.cpu_count())
+            #     else:
+            #         p = Pool(self.N-n)
+                p = Pool(70)
+                r = p.map(self.wrapper_inside, [[j-n, j, FM_inside[j-n][j-1] , FM_inside[j-n+1][j-1] , FM_inside[j-n+1][j]] for j in range(n,self.N)])
+                p.close()
+                # print("here"+str(n)+str(self.N)+str(self.N-n))
+                # r = Parallel(n_jobs=16)( [delayed(self.ComputeInside_Parallel)(j-n, j, FM_inside[j-n][j-1] , FM_inside[j-n+1][j-1] , FM_inside[j-n+1][j]) for j in range(n,self.N)])
+                # print("here!"+str(n))
                 for j in range(n,self.N):
-                    self.FM_inside[j-n][j] = r.pop(0)
-
-
+                    FM_inside[j-n][j] = r.pop(0)
             else:
                 for j in range(n,self.N):
                     i = j-n
-                    x = F.concat((self.FM_inside[i][j-1] , self.FM_inside[i+1][j-1] , self.FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-                    self.FM_inside[i][j] = self.model(x)
+                    x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                    FM_inside[i][j] = Inference.model(x)
+
 
         #compute outside
         for n in range(self.N-1 , 1-1 , -1):
-            if PARALLEL == True and self.N-n > 0:
-                # print("here1")
-                r =  Parallel(n_jobs=-1)([delayed(self.ComputeOutside_Parallel)(j-n, j) for j in range(self.N-1 , n-1 , -1)])
+            # print("koko!"+str(n))
+            if PARALLEL == True and self.N-n > 50:
+                # if self.N-n > multi.cpu_count():
+                #     p = Pool(multi.cpu_count())
+                # else:
+                #     p = Pool(self.N-n)
+
+                p = Pool(70)
                 for j in range(self.N-1 , n-1 , -1):
-                    self.FM_outside[j-n][j] = r.pop(0)
+                    i = j-n
+                    a = i-1
+                    b = j+1
+                    if i == 0:
+                        a = self.N-1
+                    if j == self.N-1:
+                        b = 0
+                r = p.map(self.wrapper_outside, [[j-n, j, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j]] for j in range(self.N-1 , n-1 , -1)])
+                p.close()
+                # r = Parallel(n_jobs=16)( [delayed(self.ComputeOutside_Parallel)(j-n, j, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j]) for j in range(self.N-1 , n-1 , -1)])
+                for j in range(self.N-1 , n-1 , -1):
+                    FM_outside[j-n][j] = r.pop(0)
 
             else:
                 for j in range(self.N-1 , n-1 , -1):
@@ -124,16 +158,15 @@ class Inference:
                     if j == self.N-1:
                         b = 0
                     #print(i,j,a,b)
-                    x = F.concat((self.FM_outside[i][b] , self.FM_outside[a][b] , self.FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-                    self.FM_outside[i][j] = self.model(x)
+                    x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                    FM_outside[i][j] = Inference.model(x)
 
         #marge inside outside
         for n in range(1,self.N):
             for j in range(n,self.N):
                 i = j-n
-                x = F.concat((self.FM_inside[i][j] , self.FM_outside[i][j]) ,axis=1)
-                BP[i][j] = self.model(x , inner = False)
-        print(BP)
+                x = F.concat((FM_inside[i][j] , FM_outside[i][j]) ,axis=1)
+                BP[i][j] = Inference.model(x , inner = False)
         return BP
 
     def buildDP(self, BP):
