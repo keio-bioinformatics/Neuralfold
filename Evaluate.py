@@ -21,5 +21,9 @@ class Evaluate:
         #print(num_correct_pair,num_predicted_pair,num_true_pair)
         Sensitivity = num_correct_pair/num_true_pair
         PPV = num_correct_pair/num_predicted_pair
-        F_value = 2 * (Sensitivity * PPV) / (Sensitivity + PPV)
+        try:
+            F_value = 2 * (Sensitivity * PPV) / (Sensitivity + PPV)
+        except ZeroDivisionError:
+            F_value = 0
+            print("ZeroDivisionError!!")
         return Sensitivity,PPV,F_value

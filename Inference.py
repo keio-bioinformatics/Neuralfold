@@ -6,7 +6,9 @@ from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 from joblib import Parallel, delayed
 from multiprocessing import Pool
 import multiprocessing as multi
-
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from time import time
+import math
 
 min_loop_length = Config.min_loop_length
 FEATURE_SIZE = Config.feature_length
@@ -54,10 +56,11 @@ class Inference:
                 print("error")
                 return Variable(np.array([[0,0,0,0]] , dtype=np.float32))
 
-    def ComputeInside_Parallel(self, i, j, inside1, inside2, inside3):
-        # x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        x = F.concat((inside1, inside2, inside3, self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        return Inference.model(x)
+    # def ComputeInside_Parallel(self, i, j, inside1, inside2, inside3):
+    def ComputeInside_Parallel(self, i, j):
+        x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+        # x = F.concat((inside1, inside2, inside3, self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+        return self.model(x)
 
     def ComputeOutside_Parallel(self, i, j, outside1, outside2, outside3):
         # a = i-1
@@ -67,7 +70,7 @@ class Inference:
         # if j == self.N-1:
         #     b = 0
         x = F.concat((outside1, outside2, outside3, self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        return Inference.model(x)
+        return self.model(x)
 
     def wrapper_inside(self,args):
         return self.ComputeInside_Parallel(*args)
@@ -75,12 +78,115 @@ class Inference:
     def wrapper_outside(self,args):
         return self.ComputeOutside_Parallel(*args)
 
-    def ComputeInsideOutside(self, model):
-        Inference.model = model
-        BP = [[0 for i in range(self.N)] for j in range(self.N)]
+    def Compute_Inside(self):
+        #define feature matrix
         FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #compute inside
+        for n in range(1,self.N):
+            # start = time()
+            #Parallel
+            if PARALLEL == True and self.N-n > 300:
+                #multiprocessing
+                # process = math.floor((self.N-n)/140)
+                # p = Pool(process)
+                # # r = p.map(self.wrapper_inside, [[j-n, j, FM_inside[j-n][j-1] , FM_inside[j-n+1][j-1] , FM_inside[j-n+1][j]] for j in range(n,self.N)])
+                # r = p.map(self.wrapper_inside, [[j-n, j] for j in range(n, self.N)])
+                # p.close()
+                # for j in range(n,self.N):
+                #     FM_inside[j-n][j] = r.pop(0)
 
+                #joblib
+                # r = Parallel(n_jobs=16)( [delayed(self.ComputeInside_Parallel)(j-n, j, FM_inside[j-n][j-1] , FM_inside[j-n+1][j-1] , FM_inside[j-n+1][j]) for j in range(n,self.N)])
+                # for j in range(n,self.N):
+                #     FM_inside[j-n][j] = r.pop(0)
+
+                #multithread
+                # pool = ThreadPoolExecutor(4)
+                # r = [pool.submit(self.ComputeInside_Parallel, j-n, j, FM_inside[j-n][j-1] , FM_inside[j-n+1][j-1] , FM_inside[j-n+1][j]) for j in range(n,self.N)]
+                # for j in range(n,self.N):
+                #     FM_inside[j-n][j] = r[j].result()
+                # pool.shutdown()
+                print("PARALLEL inside")
+
+
+
+            else:
+                for j in range(n,self.N):
+                    i = j-n
+                    x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                    FM_inside[i][j] = self.model(x)
+
+        return FM_inside
+
+    def Compute_Outside(self):
+        FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        # compute outside
+        for n in range(self.N-1 , 1-1 , -1):
+            if PARALLEL == True and self.N-n > 50:
+                # multiprocessing
+                # if self.N-n > multi.cpu_count():
+                #     p = Pool(multi.cpu_count())
+                # else:
+                #     p = Pool(self.N-n)
+                # p = Pool(round((self.N-n)/10))
+                # p = Pool(4)
+                # for j in range(self.N-1 , n-1 , -1):
+                #     i = j-n
+                #     a = i-1
+                #     b = j+1
+                #     if i == 0:
+                #         a = self.N-1
+                #     if j == self.N-1:
+                #         b = 0
+                # r = p.map(self.wrapper_outside, [[j-n, j, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] for j in range(self.N-1 , n-1 , -1)])
+                # p.close()
+                # for j in range(self.N-1 , n-1 , -1):
+                #     FM_outside[j-n][j] = r.pop(0)
+                #
+                # joblib
+                # r = Parallel(n_jobs=16)( [delayed(self.ComputeOutside_Parallel)(j-n, j, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j]) for j in range(self.N-1 , n-1 , -1)])
+                # for j in range(self.N-1 , n-1 , -1):
+                #     FM_outside[j-n][j] = r.pop(0)
+                #
+                # multithread
+                # pool = ThreadPoolExecutor(4)
+                # r = [pool.submit(self.ComputeOutside_Parallel, j-n, j, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j]) for j in range(self.N-1 , n-1 , -1)]
+                # for j in range(self.N-1 , n-1 , -1):
+                #     FM_outside[j-n][j] = r[j].result()
+                # pool.shutdown()
+                print("PARALLEL outside")
+
+            else:
+                for j in range(self.N-1 , n-1 , -1):
+                    i = j-n
+                    a = i-1
+                    b = j+1
+                    if i == 0:
+                        a = self.N-1
+                    if j == self.N-1:
+                        b = 0
+                    x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                    FM_outside[i][j] = self.model(x)
+        return FM_outside
+
+    def wrapper_insideoutside(self, changer):
+        if changer == "inside":
+            return self.Compute_Inside()
+        elif changer == "outside":
+            return self.Compute_Outside()
+        else:
+            print("error")
+            return
+
+    def ComputeInsideOutside(self, model):
+        self.model = model
+        BP = [[0 for i in range(self.N)] for j in range(self.N)]
+        FM_inside = self.Compute_Inside()
+        FM_outside = self.Compute_Outside()
+
+        # p = Pool(2)
+        # FM_inside, FM_outside = p.map(self.wrapper_insideoutside, [j for j in ["inside", "outside"]])
+        # p.close()
 
         # gpu_device = 0
         # cuda.get_device(gpu_device).use()
@@ -93,80 +199,14 @@ class Inference:
         #     print("gpu")
         #     # FM_inside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
         #     # FM_outside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        # #use cpu
-        # else:
-        #     FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        #     FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-
-        print(multi.cpu_count())
-
-        #compute inside
-        for n in range(1,self.N):
-            # print("koko"+str(n))
-            #Parallel
-            if PARALLEL == True and self.N-n > 50:
-            #     if self.N-n > multi.cpu_count():
-            #         p = Pool(multi.cpu_count())
-            #     else:
-            #         p = Pool(self.N-n)
-                p = Pool(70)
-                r = p.map(self.wrapper_inside, [[j-n, j, FM_inside[j-n][j-1] , FM_inside[j-n+1][j-1] , FM_inside[j-n+1][j]] for j in range(n,self.N)])
-                p.close()
-                # print("here"+str(n)+str(self.N)+str(self.N-n))
-                # r = Parallel(n_jobs=16)( [delayed(self.ComputeInside_Parallel)(j-n, j, FM_inside[j-n][j-1] , FM_inside[j-n+1][j-1] , FM_inside[j-n+1][j]) for j in range(n,self.N)])
-                # print("here!"+str(n))
-                for j in range(n,self.N):
-                    FM_inside[j-n][j] = r.pop(0)
-            else:
-                for j in range(n,self.N):
-                    i = j-n
-                    x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-                    FM_inside[i][j] = Inference.model(x)
 
 
-        #compute outside
-        for n in range(self.N-1 , 1-1 , -1):
-            # print("koko!"+str(n))
-            if PARALLEL == True and self.N-n > 50:
-                # if self.N-n > multi.cpu_count():
-                #     p = Pool(multi.cpu_count())
-                # else:
-                #     p = Pool(self.N-n)
-
-                p = Pool(70)
-                for j in range(self.N-1 , n-1 , -1):
-                    i = j-n
-                    a = i-1
-                    b = j+1
-                    if i == 0:
-                        a = self.N-1
-                    if j == self.N-1:
-                        b = 0
-                r = p.map(self.wrapper_outside, [[j-n, j, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j]] for j in range(self.N-1 , n-1 , -1)])
-                p.close()
-                # r = Parallel(n_jobs=16)( [delayed(self.ComputeOutside_Parallel)(j-n, j, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j]) for j in range(self.N-1 , n-1 , -1)])
-                for j in range(self.N-1 , n-1 , -1):
-                    FM_outside[j-n][j] = r.pop(0)
-
-            else:
-                for j in range(self.N-1 , n-1 , -1):
-                    i = j-n
-                    a = i-1
-                    b = j+1
-                    if i == 0:
-                        a = self.N-1
-                    if j == self.N-1:
-                        b = 0
-                    #print(i,j,a,b)
-                    x = F.concat((FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-                    FM_outside[i][j] = Inference.model(x)
-
-        #marge inside outside
+        # marge inside outside
         for n in range(1,self.N):
             for j in range(n,self.N):
                 i = j-n
                 x = F.concat((FM_inside[i][j] , FM_outside[i][j]) ,axis=1)
-                BP[i][j] = Inference.model(x , inner = False)
+                BP[i][j] = self.model(x , inner = False)
         return BP
 
     def buildDP(self, BP):
