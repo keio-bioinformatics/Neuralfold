@@ -8,15 +8,17 @@ from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 
 feature_length = Config.feature_length
 hidden = Config.hidden
-
+base_length = Config.base_length
 class Recursive_net(Chain):
 
     def __init__(self):
         # パラメータを持つ層の登録
         super(Recursive_net, self).__init__(
-            l1 = L.Linear(None , hidden),
+            # l1 = L.Linear(feature_length * 3 + base_length * 2, hidden),
+            l1 = L.Linear(None, hidden),
             l2 = L.Linear(hidden , feature_length),
-            L1 = L.Linear(None , hidden),
+            # L1 = L.Linear(feature_length * 2 , hidden),
+            L1 = L.Linear(None, hidden),
             L2 = L.Linear(hidden , 1)
         )
 

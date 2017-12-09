@@ -25,5 +25,6 @@ class Evaluate:
             F_value = 2 * (Sensitivity * PPV) / (Sensitivity + PPV)
         except ZeroDivisionError:
             F_value = 0
+            print("kotti??")
             print("ZeroDivisionError!!")
         return Sensitivity,PPV,F_value
