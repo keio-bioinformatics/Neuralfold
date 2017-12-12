@@ -46,9 +46,13 @@ class Train:
         # optimizer = optimizers.SGD()
         # optimizer.setup(model)
         for seq, true_structure in zip(seq_set, true_structure_set):
+            start_BP = time()
             inference = Inference.Inference(seq)
             predicted_BP = inference.ComputeInsideOutside(self.model)
+            # print(' BP : '+str(time() - start_BP)+'sec')
+            start_structure = time()
             predicted_structure = inference.ComputePosterior(predicted_BP)
+            # print(' structure : '+str(time() - start_structure)+'sec')
 
             i = 0
             for predicted_pair in predicted_structure:

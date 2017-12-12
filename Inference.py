@@ -21,8 +21,7 @@ class Inference:
     def __init__(self, seq):
         self.seq=seq
         self.N=len(self.seq)
-        # FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        # FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+
         self.sequence_vector = np.empty((0,base_length), dtype=np.float32)
         for base in self.seq:
             self.sequence_vector = np.vstack((self.sequence_vector, self.base_represent(base)))
@@ -113,6 +112,7 @@ class Inference:
         #define feature matrix
         # FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
         FM_inside = Variable(np.zeros((self.N, 1,FEATURE_SIZE), dtype=np.float32))
+        start_inside = time()
 
         #compute inside
         for n in range(1,self.N):
@@ -183,6 +183,7 @@ class Inference:
                 x = F.hstack((x,self.sequence_vector[0 : self.N-n], self.sequence_vector[n : self.N]))
                 FM_inside = F.vstack((FM_inside, self.model(x).reshape(self.N-n,1,FEATURE_SIZE)))
                 # print(' inside_row : '+str(time() - start_inside_row)+'sec')
+        # print(' inside : '+str(time() - start_inside)+'sec')
         return FM_inside
 
 
@@ -191,6 +192,7 @@ class Inference:
         # define feature matrix
         # FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
         FM_outside = Variable(np.empty((0, 1, FEATURE_SIZE), dtype=np.float32))
+        start_outside = time()
 
         # compute outside
         for n in range(self.N-1 , 1-1 , -1):
@@ -274,7 +276,7 @@ class Inference:
                 x = F.hstack((x,self.sequence_vector[self.N-n-1 :: -1], self.sequence_vector[self.N-1 : n-1 : -1]))
                 FM_outside = F.vstack((FM_outside, self.model(x).reshape(self.N-n,1,FEATURE_SIZE)))
                 # print(' outside_row : '+str(time() - start_outside_row)+'sec')
-
+        # print(' outside : '+str(time() - start_outside)+'sec')
         return FM_outside
 
     def wrapper_insideoutside(self, changer):
@@ -312,6 +314,7 @@ class Inference:
 
         # marge inside outside
 
+        start_merge = time()
         for n in range(1,self.N):
             #batch
             # x = Variable(np.array([[]], dtype=np.float32))
@@ -322,17 +325,15 @@ class Inference:
             # r = self.model(x , inner = False).reshape(self.N-n,1,1)
             # for j in range(n,self.N):
             #     BP[j-n][j] = r[j-n]
-            for j in range(n,self.N):
-                i = j-n
-                if n == self.N-1:
-                    x = F.hstack((FM_inside[self.hash_for_inside(0, n) : ], FM_outside[self.hash_for_outside(0, n) : : -1]))
-                else:
-                    x = F.hstack((FM_inside[self.hash_for_inside(0, n) : self.hash_for_inside(0, n+1)], FM_outside[self.hash_for_outside(0, n) : self.hash_for_outside(0, n+1) : -1]))
-                BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
-        # print(BP[3].data+1)
+            if n == self.N-1:
+                x = F.hstack((FM_inside[self.hash_for_inside(0, n) : ], FM_outside[self.hash_for_outside(0, n) : : -1])).reshape(self.N-n, -1)
+            else:
+                x = F.hstack((FM_inside[self.hash_for_inside(0, n) : self.hash_for_inside(0, n+1)], FM_outside[self.hash_for_outside(0, n) : self.hash_for_outside(0, n+1) : -1])).reshape(self.N-n, -1)
+            BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
+        # print(' merge : '+str(time() - start_merge)+'sec')
         return BP
 
-    def buildDP(self, BP):
+    def buildDP2(self, BP):
         DP = np.zeros((self.N,self.N))
         for n in range(1,self.N):
             for j in range(n,self.N):
@@ -353,6 +354,67 @@ class Inference:
                     DP[i,j] = max(case1,case2,case3)
         return DP
 
+    def basepairmatrix(self):
+        sequence = np.array(list(self.seq.upper()))
+        bases= ['A', 'U', 'G', 'C']
+        matrix = []
+        matrix_reverse = []
+        for base in bases:
+            a = np.zeros((self.N), dtype=np.float32)
+            a[sequence == base] = 1
+            a[sequence != base] = 0
+            a = np.tile(a,(self.N,1))
+            matrix.append(a)
+            matrix_reverse.append(a.transpose())
+        all_bases = np.zeros((self.N,self.N), dtype=np.float32)
+        # if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
+        for tup in [(0, 1), (1, 0), (2, 3), (3, 2),(1,2),(2,1)]:
+            all_bases += matrix[tup[0]] * matrix_reverse[tup[1]]
+        all_bases = all_bases==0
+        # print(all_bases)
+        return all_bases
+
+    def buildDP(self, BP):
+        DP = np.zeros((self.N,self.N), dtype=np.float32)
+        DP_bifarcation_row = np.zeros((self.N,self.N), dtype=np.float32)
+        DP_bifarcation_column = np.zeros((self.N,self.N), dtype=np.float32)
+
+        canonical_base_matrix = self.basepairmatrix()
+
+        for n in range(1,self.N):
+            if n >= 3:
+                a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
+                b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
+                a[b] = 0
+                print(BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)])
+                BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data = a
+                print(a)
+                print(BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)])
+                # print(a)
+                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a.reshape(self.N-n)
+                case2 = DP[range(1,self.N-n+1),range(n,self.N)]
+                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
+                case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N]
+                DP_diagonal = np.vstack((case1, case2, case3, case4)).max(axis=0)
+
+
+            else:
+                a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
+                b= canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
+                a[b] = 0
+                BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data = a
+                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a.reshape(self.N-n)
+                case2 = DP[range(1,self.N-n+1),range(n,self.N)]
+                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
+                DP_diagonal = np.vstack((case1, case2, case3)).max(axis=0)
+
+            DP[range(0,self.N-n),range(n,self.N)] = DP_diagonal
+            DP_bifarcation_row[n,0:self.N-n] = DP_diagonal
+            DP_bifarcation_column[self.N-n-1,n:self.N] = DP_diagonal
+
+        return DP, BP
+
+
     def traceback(self, DP, BP, i, j, pair):
         if i < j:
             if DP[i, j] == DP[i+1, j]:
@@ -368,10 +430,19 @@ class Inference:
                         pair = self.traceback(DP, BP, i, k, pair)
                         pair = self.traceback(DP, BP, k+1, j, pair)
                         break
+                print("error")
+
         return pair
 
 
     def ComputePosterior(self, BP):
-        DP = self.buildDP(BP)
+        start_DP = time()
+        DP, BP = self.buildDP(BP)
+        # print(' DP : '+str(time() - start_DP)+'sec')
+        start_traceback = time()
         pair = self.traceback(DP, BP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
+        # print(pair)
+        # pair = self.traceback(DP2, BP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
+        # print(pair)
+        # print(' traceback : '+str(time() - start_traceback)+'sec')
         return pair
