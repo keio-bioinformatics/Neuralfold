@@ -1,6 +1,6 @@
 min_loop_length = 0
 feature_length = 80
-iters_num = 3
+iters_num = 10
 bifurcation = False
 # Parallel = True
 Parallel = False

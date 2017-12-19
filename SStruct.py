@@ -36,7 +36,7 @@ class SStruct:
                 name_set = np.delete(name_set, -1)
                 seq_set = np.delete(seq_set,-1)
                 structure_set.pop(-1)
-            
+
 
             line = f.readline()
 

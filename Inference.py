@@ -9,16 +9,17 @@ import multiprocessing as multi
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
 import math
+import random
 
 min_loop_length = Config.min_loop_length
-FEATURE_SIZE = Config.feature_length
+# self.FEATURE_SIZE = Config.feature_length
 bifurcation = Config.bifurcation
 PARALLEL = Config.Parallel
 gpu = Config.gpu
 base_length = Config.base_length
 
 class Inference:
-    def __init__(self, seq):
+    def __init__(self, seq, FEATURE_SIZE):
         self.seq=seq
         self.N=len(self.seq)
 
@@ -26,6 +27,7 @@ class Inference:
         for base in self.seq:
             self.sequence_vector = np.vstack((self.sequence_vector, self.base_represent(base)))
         self.sequence_vector = Variable(self.sequence_vector)
+        self.FEATURE_SIZE = FEATURE_SIZE
 
     def pair_check(self,tup):
         if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
@@ -110,8 +112,8 @@ class Inference:
 
     def Compute_Inside(self):
         #define feature matrix
-        # FM_inside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        FM_inside = Variable(np.zeros((self.N, 1,FEATURE_SIZE), dtype=np.float32))
+        # FM_inside = [[Variable(np.zeros((1,self.FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        FM_inside = Variable(np.zeros((self.N, 1,self.FEATURE_SIZE), dtype=np.float32))
         start_inside = time()
 
         #compute inside
@@ -156,7 +158,7 @@ class Inference:
                 #     i = j-n
                 #     x = F.concat((x, FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
                 # x = x.reshape(self.N-n, -1)
-                # r = self.model(x).reshape(self.N-n,1,FEATURE_SIZE)
+                # r = self.model(x).reshape(self.N-n,1,self.FEATURE_SIZE)
                 # for j in range(n,self.N):
                 #     FM_inside[j-n][j] = r[j-n]
 
@@ -165,23 +167,26 @@ class Inference:
                 # if n == 1:
                 #     for j in range(n,self.N):
                 #         i = j-n
-                #         x = F.concat((x, FM_inside[self.hash_for_inside(i,j-1)] , Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)), FM_inside[self.hash_for_inside(i+1,j)] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
+                #         x = F.concat((x, FM_inside[self.hash_for_inside(i,j-1)] , Variable(np.zeros((1,self.FEATURE_SIZE), dtype=np.float32)), FM_inside[self.hash_for_inside(i+1,j)] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
                 # else:
                 #     for j in range(n,self.N):
                 #         i = j-n
                 #         x = F.concat((x, FM_inside[self.hash_for_inside(i,j-1)] , FM_inside[self.hash_for_inside(i+1,j-1)] , FM_inside[self.hash_for_inside(i+1,j)] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
                 # x = x.reshape(self.N-n, -1)
-                # FM_inside = F.vstack((FM_inside, self.model(x).reshape(self.N-n,1,FEATURE_SIZE)))
+                # FM_inside = F.vstack((FM_inside, self.model(x).reshape(self.N-n,1,self.FEATURE_SIZE)))
 
                 # start_inside_row = time()
                 if n == 1:
-                    x = F.hstack((FM_inside[self.hash_for_inside(0, n-1) : self.hash_for_inside(self.N-n, self.N-1)], Variable(np.zeros((self.N-1, 1,FEATURE_SIZE), dtype=np.float32)),
+                    x = F.hstack((FM_inside[self.hash_for_inside(0, n-1) : self.hash_for_inside(self.N-n, self.N-1)], Variable(np.zeros((self.N-1, 1,self.FEATURE_SIZE), dtype=np.float32)),
                         FM_inside[self.hash_for_inside(1, n) : self.hash_for_inside(0, n)])).reshape(self.N-n, -1)
                 else:
                     x = F.hstack((FM_inside[self.hash_for_inside(0, n-1) : self.hash_for_inside(self.N-n, self.N-1)], FM_inside[self.hash_for_inside(1, n-1) : self.hash_for_inside(self.N-n+1, self.N-1)],
                         FM_inside[self.hash_for_inside(1, n) : self.hash_for_inside(0, n)])).reshape(self.N-n, -1)
                 x = F.hstack((x,self.sequence_vector[0 : self.N-n], self.sequence_vector[n : self.N]))
-                FM_inside = F.vstack((FM_inside, self.model(x).reshape(self.N-n,1,FEATURE_SIZE)))
+                # if n % random.randint(20,25) == 0:
+                # if random.randint(0,25) == 5:
+                #     x.unchain_backward()
+                FM_inside = F.vstack((FM_inside, self.model(x).reshape(self.N-n,1,self.FEATURE_SIZE)))
                 # print(' inside_row : '+str(time() - start_inside_row)+'sec')
         # print(' inside : '+str(time() - start_inside)+'sec')
         return FM_inside
@@ -190,8 +195,8 @@ class Inference:
 
     def Compute_Outside(self):
         # define feature matrix
-        # FM_outside = [[Variable(np.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        FM_outside = Variable(np.empty((0, 1, FEATURE_SIZE), dtype=np.float32))
+        # FM_outside = [[Variable(np.zeros((1,self.FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        FM_outside = Variable(np.empty((0, 1, self.FEATURE_SIZE), dtype=np.float32))
         start_outside = time()
 
         # compute outside
@@ -254,27 +259,30 @@ class Inference:
                 #         b = 0
                 #     x = F.concat((x, FM_outside[i][b] , FM_outside[a][b] , FM_outside[a][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
                 # x = x.reshape((self.N-1)-(n-1), -1)
-                # r = self.model(x).reshape((self.N-1)-(n-1), 1, FEATURE_SIZE)
+                # r = self.model(x).reshape((self.N-1)-(n-1), 1, self.FEATURE_SIZE)
                 # for j in range(self.N-1 , n-1 , -1):
                 #     FM_outside[j-n][j] = r[j-n]
 
 
                 # start_outside_row = time()
                 if n == self.N-1:
-                    x = F.hstack((Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32)), Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32)),
-                        Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32)))).reshape(self.N-n, -1)
+                    x = F.hstack((Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)), Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)),
+                        Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)))).reshape(self.N-n, -1)
                 elif n == self.N-2:
-                    first = F.vstack((Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32)), FM_outside[0].reshape(1,1,FEATURE_SIZE)))
-                    second = F.vstack((Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32)), Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32))))
-                    third = F.vstack((FM_outside[0].reshape(1,1,FEATURE_SIZE), Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32))))
+                    first = F.vstack((Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)), FM_outside[0].reshape(1,1,self.FEATURE_SIZE)))
+                    second = F.vstack((Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)), Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32))))
+                    third = F.vstack((FM_outside[0].reshape(1,1,self.FEATURE_SIZE), Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32))))
                     x = F.hstack((first, second, third)).reshape(self.N-n, -1)
                 else:
-                    first = F.vstack((Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32)), FM_outside[self.hash_for_outside(self.N-n-2, self.N-1) : self.hash_for_outside(self.N-n-1, self.N-1)]))
-                    second = F.vstack((Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32)), FM_outside[self.hash_for_outside(self.N-n-3, self.N-1) : self.hash_for_outside(self.N-n-2, self.N-1)], Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32))))
-                    third = F.vstack((FM_outside[self.hash_for_outside(self.N-n-2, self.N-1) : self.hash_for_outside(self.N-n-1, self.N-1)], Variable(np.zeros((1, 1,FEATURE_SIZE), dtype=np.float32))))
+                    first = F.vstack((Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)), FM_outside[self.hash_for_outside(self.N-n-2, self.N-1) : self.hash_for_outside(self.N-n-1, self.N-1)]))
+                    second = F.vstack((Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)), FM_outside[self.hash_for_outside(self.N-n-3, self.N-1) : self.hash_for_outside(self.N-n-2, self.N-1)], Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32))))
+                    third = F.vstack((FM_outside[self.hash_for_outside(self.N-n-2, self.N-1) : self.hash_for_outside(self.N-n-1, self.N-1)], Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32))))
                     x = F.hstack((first, second, third)).reshape(self.N-n, -1)
                 x = F.hstack((x,self.sequence_vector[self.N-n-1 :: -1], self.sequence_vector[self.N-1 : n-1 : -1]))
-                FM_outside = F.vstack((FM_outside, self.model(x).reshape(self.N-n,1,FEATURE_SIZE)))
+                # if n % random.randint(20,25) == 0:
+                # if random.randint(0,25) == 5:
+                #     x.unchain_backward()
+                FM_outside = F.vstack((FM_outside, self.model(x).reshape(self.N-n,1,self.FEATURE_SIZE)))
                 # print(' outside_row : '+str(time() - start_outside_row)+'sec')
         # print(' outside : '+str(time() - start_outside)+'sec')
         return FM_outside
@@ -308,8 +316,8 @@ class Inference:
         #use gpu
         # if gpu == True:
         #     print("gpu")
-        #     # FM_inside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
-        #     # FM_outside = [[Variable(xp.zeros((1,FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #     # FM_inside = [[Variable(xp.zeros((1,self.FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
+        #     # FM_outside = [[Variable(xp.zeros((1,self.FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
 
 
         # marge inside outside
@@ -370,8 +378,8 @@ class Inference:
         # if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
         for tup in [(0, 1), (1, 0), (2, 3), (3, 2),(1,2),(2,1)]:
             all_bases += matrix[tup[0]] * matrix_reverse[tup[1]]
-        all_bases = all_bases==0
-        # print(all_bases)
+        # all_bases = all_bases==0
+        all_bases[all_bases == 0] = -1000
         return all_bases
 
     def buildDP(self, BP):
@@ -385,13 +393,7 @@ class Inference:
             if n >= 3:
                 a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
                 b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
-                a[b] = 0
-                print(BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)])
-                BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data = a
-                print(a)
-                print(BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)])
-                # print(a)
-                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a.reshape(self.N-n)
+                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a*b
                 case2 = DP[range(1,self.N-n+1),range(n,self.N)]
                 case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
                 case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N]
@@ -400,10 +402,8 @@ class Inference:
 
             else:
                 a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                b= canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
-                a[b] = 0
-                BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data = a
-                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a.reshape(self.N-n)
+                b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
+                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a*b
                 case2 = DP[range(1,self.N-n+1),range(n,self.N)]
                 case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
                 DP_diagonal = np.vstack((case1, case2, case3)).max(axis=0)
@@ -412,37 +412,38 @@ class Inference:
             DP_bifarcation_row[n,0:self.N-n] = DP_diagonal
             DP_bifarcation_column[self.N-n-1,n:self.N] = DP_diagonal
 
-        return DP, BP
+        return DP
 
 
     def traceback(self, DP, BP, i, j, pair):
         if i < j:
-            if DP[i, j] == DP[i+1, j]:
+            # if DP[i, j] == DP[i+1, j]:
+            if np.absolute(DP[i, j] - DP[i+1, j]) < 0.0001:
                 pair = self.traceback(DP, BP, i+1, j, pair)
-            elif DP[i, j] == DP[i, j-1]:
+            # elif DP[i, j] == DP[i, j-1]:
+            elif np.absolute(DP[i, j] - DP[i, j-1]) < 0.0001:
                 pair = self.traceback(DP, BP, i, j-1, pair)
-            elif DP[i, j] == DP[i+1, j-1]+BP[self.hash_for_BP(i, j)].data:
+            # elif DP[i, j] == DP[i+1, j-1]+BP[self.hash_for_BP(i, j)].data:
+            elif np.absolute(DP[i, j] - (DP[i+1, j-1]+BP[self.hash_for_BP(i, j)].data)) < 0.0001:
                 pair = np.append(pair, [[i,j]], axis=0)
                 pair = self.traceback(DP, BP, i+1, j-1, pair)
             else:
                 for k in range(i+1,j):
-                    if DP[i,j] == DP[i,k]+DP[k+1,j]:
+                    # if DP[i,j] == DP[i,k]+DP[k+1,j]:
+                    if np.absolute(DP[i,j] - (DP[i,k]+DP[k+1,j])) < 0.0001:
                         pair = self.traceback(DP, BP, i, k, pair)
                         pair = self.traceback(DP, BP, k+1, j, pair)
                         break
-                print("error")
-
+                    if(k==j-1):
+                        print("error")
         return pair
 
 
     def ComputePosterior(self, BP):
         start_DP = time()
-        DP, BP = self.buildDP(BP)
+        DP = self.buildDP(BP)
         # print(' DP : '+str(time() - start_DP)+'sec')
         start_traceback = time()
         pair = self.traceback(DP, BP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
-        # print(pair)
-        # pair = self.traceback(DP2, BP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
-        # print(pair)
         # print(' traceback : '+str(time() - start_traceback)+'sec')
         return pair

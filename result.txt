@@ -1,1 +1,1 @@
-Sensitivity=0.18519 PPV=0.11299 F_value=0.14035
+Sensitivity=1.0 PPV=0.5 F_value=0.66667

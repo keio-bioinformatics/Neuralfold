@@ -16,27 +16,58 @@ import multiprocessing as multi
 from operator import itemgetter
 import math
 from joblib import Parallel, delayed
+import SStruct
 
-iters_num = Config.iters_num
-TEST = Config.TEST
 batch_num = Config.batch_num
 maximum_slots = Config.maximum_slots
 BATCH = Config.BATCH
 Iterative_Parameter_Mixture = Config.Iterative_Parameter_Mixture
 
 class Train:
-    def __init__(self, seq_set, structure_set, seq_set_test = None, structure_set_test = None):
-        self.seq_set = seq_set
-        self.seq_length_set = []
-        for x in self.seq_set:
-            self.seq_length_set.append(len(x))
-        self.structure_set = structure_set
-        self.seq_set_test = seq_set_test
-        self.structure_set_test = structure_set_test
+    # def __init__(self, seq_set, structure_set, seq_set_test = None, structure_set_test = None):
+    #     self.seq_set = seq_set
+    #     self.seq_length_set = []
+    #     for x in self.seq_set:
+    #         self.seq_length_set.append(len(x))
+    #     self.structure_set = structure_set
+    #     self.seq_set_test = seq_set_test
+    #     self.structure_set_test = structure_set_test
+    def __init__(self, args):
+        sstruct = SStruct.SStruct(args.train_file)
+        self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
+
+        if args.test_file:
+            sstruct = SStruct.SStruct(args.test_file)
+            self.name_set_test, self.seq_set_test, self.structure_set_test = sstruct.load_FASTA()
+        else:
+            self.seq_set_test = None
+
+        self.iters_num = args.iteration
+        # self.seq_length_set = []
+        # for x in self.seq_set:
+        #     self.seq_length_set.append(len(x))
+
+        self.model = Recursive.Recursive_net(args.hidden,args.feature)
+        if args.Parameters:
+            serializers.load_npz(args.Parameters.name, self.model)
+
+        self.optimizer = optimizers.Adam()
+        self.optimizer.setup(self.model)
+        if args.Optimizers:
+            serializers.load_npz(args.Optimizers.name, self.optimizer)
+
+        # self.FEATURE_SIZE = args.feature
+        self.args =args
+
 
     def hash_for_BP(self, i, j, N):
         n = j-i
         return int(n * (N + N - n +1)/2 + i)
+
+    def Useloss(self,predicted_BP, seq, true_structure):
+        for true_pair in true_structure:
+            predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))].data -= 0.2
+        return predicted_BP
 
     def train_engine(self, seq_set, true_structure_set):
         # model = Recursive.Recursive_net()
@@ -45,11 +76,15 @@ class Train:
         # optimizer = optimizers.Adam()
         # optimizer = optimizers.SGD()
         # optimizer.setup(model)
+        step=0
         for seq, true_structure in zip(seq_set, true_structure_set):
+            print("step=",str(step))
+            step +=1
             start_BP = time()
-            inference = Inference.Inference(seq)
+            inference = Inference.Inference(seq,self.args.feature)
             predicted_BP = inference.ComputeInsideOutside(self.model)
             # print(' BP : '+str(time() - start_BP)+'sec')
+            predicted_BP = self.Useloss(predicted_BP, seq, true_structure)
             start_structure = time()
             predicted_structure = inference.ComputePosterior(predicted_BP)
             # print(' structure : '+str(time() - start_structure)+'sec')
@@ -68,16 +103,24 @@ class Train:
             loss = 0
             t = Variable(np.array([[0]], dtype=np.float32))
             t2 = Variable(np.array([[1]], dtype=np.float32))
+            # count = 0
             #backprop
             for predicted_pair in predicted_structure:
                 y = predicted_BP[self.hash_for_BP(predicted_pair[0], predicted_pair[1], len(seq))]
                 loss += F.mean_squared_error(y, t)
+                # count += 1
             for true_pair in true_structure:
                 y = predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))]
                 loss += F.mean_squared_error(y, t2)
+                # count += 1
+            # loss = count*loss
+            start_backward = time()
             self.model.zerograds()
             loss.backward()
+            # print(' backward : '+str(time() - start_backward)+'sec')
+            start_update = time()
             self.optimizer.update()
+            # print(' update : '+str(time() - start_update)+'sec')
 
         return self.model
 
@@ -88,13 +131,14 @@ class Train:
 
     def train(self):
         #define model
-        self.model = Recursive.Recursive_net()
-        self.optimizer = optimizers.Adam()
-        self.optimizer.setup(self.model)
+        # self.model = Recursive.Recursive_net()
+        # self.optimizer = optimizers.Adam()
+        # self.optimizer.setup(self.model)
+
         list_for_shuffle = list(zip(self.seq_set, self.structure_set))
         random.shuffle(list_for_shuffle)
 
-        for ite in range(iters_num):
+        for ite in range(self.iters_num):
             print('ite = ' +  str(ite))
             start_iter = time()
 
@@ -188,14 +232,18 @@ class Train:
             #save model
             serializers.save_npz("NEURALfold_params.data" + str(ite), self.model)
             serializers.save_npz("NEURALfold_params.data", self.model)
-            # serializers.save_npz('my.state'+ str(ite), optimizer)
+            serializers.save_npz('my.state'+ str(ite), self.optimizer)
+            serializers.save_npz('my.state', self.optimizer)
 
             #TEST
-            # if (self.seq_set_test is not None and i == iters_num-1):
-            if (self.seq_set_test is not None):
+            # if (self.seq_set_test is not None and ite == self.iters_num-1):
+            if (self.args.test_file is not None):
+                predicted_structure_set = []
                 print("start testing...")
-                test = Test.Test(self.seq_set_test)
-                predicted_structure_set = test.test()
+                for seq in self.seq_set_test:
+                    inference = Inference.Inference(seq,self.args.feature)
+                    predicted_BP = inference.ComputeInsideOutside(self.model)
+                    predicted_structure_set.append(inference.ComputePosterior(predicted_BP))
                 evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
                 Sensitivity, PPV, F_value = evaluate.getscore()
                 if ite == 0:

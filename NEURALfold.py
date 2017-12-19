@@ -10,27 +10,14 @@ import argparse
 
 def train(args):
     print("start training...")
-    sstruct = SStruct.SStruct(args.train_file)
-    name_set, seq_set, structure_set = sstruct.load_FASTA()
-    if args.test:
-        sstruct = SStruct.SStruct(args.test)
-        name_set_test, seq_set_test, structure_set_test = sstruct.load_FASTA()
-        train = Train.Train(seq_set, structure_set, seq_set_test, structure_set_test)
-    else:
-        train = Train.Train(seq_set, structure_set, )
+    train = Train.Train(args)
     model = train.train()
     serializers.save_npz("NEURALfold_params.data", model)
 
 def test(args):
     print("start testing...")
-    sstruct = SStruct.SStruct(args.test_file)
-    name_set_test, seq_set_test, structure_set_test = sstruct.load_FASTA()
-    test = Test.Test(seq_set_test)
-    predicted_structure_set = test.test()
-    # print(structure_set_test)
-    # print(predicted_structure_set)
-    evaluate = Evaluate.Evaluate(predicted_structure_set , structure_set_test)
-    Sensitivity, PPV, F_value = evaluate.getscore()
+    test = Test.Test(args)
+    Sensitivity, PPV, F_value = test.test()
     print(Sensitivity, PPV, F_value)
 
 def main():
@@ -51,14 +38,26 @@ def main():
     parser_training = subparser.add_parser('train', help='training RNA secondary structures')
     parser_training.add_argument('train_file', help = 'FASTA file for training',
                         type=argparse.FileType('r'))
-    parser_training.add_argument('-t','--test', help = 'FASTA file for test',
+    parser_training.add_argument('-t','--test_file', help = 'FASTA file for test',
                         type=argparse.FileType('r'))
+    parser_training.add_argument('-p','--Parameters', help = 'Parameter file',
+                        type=argparse.FileType('r'))
+    parser_training.add_argument('-o','--Optimizers', help = 'Optimizer file',
+                        type=argparse.FileType('r'))
+    parser_training.add_argument('-i','--iteration', help = 'number of iteration',
+                        type=int,default=1)
+    parser_training.add_argument('-H','--hidden', help = 'hidden layer nodes',
+                        type=int,default=80)
+    parser_training.add_argument('-f','--feature', help = 'feature length',
+                        type=int,default=80)
     parser_training.set_defaults(func = train)
 
 
     # add subparser for test
     parser_test = subparser.add_parser('test', help='test secondary structures')
     parser_test.add_argument('test_file', help = 'FASTA file for test',
+                        type=argparse.FileType('r'))
+    parser_test.add_argument('-p','--Parameters', help = 'Parameter file',
                         type=argparse.FileType('r'))
     parser_test.set_defaults(func = test)
 
