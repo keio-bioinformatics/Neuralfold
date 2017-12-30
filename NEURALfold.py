@@ -46,10 +46,27 @@ def main():
                         type=argparse.FileType('r'))
     parser_training.add_argument('-i','--iteration', help = 'number of iteration',
                         type=int,default=1)
-    parser_training.add_argument('-H','--hidden', help = 'hidden layer nodes',
+
+    # neural networks architecture
+    parser_training.add_argument('-H1','--hidden_insideoutside', help = 'hidden layer nodes for inside outside',
                         type=int,default=80)
+    parser_training.add_argument('-H2','--hidden2_insideoutside', help = 'hidden layer nodes2 for inside outside',
+                        type=int)
+    parser_training.add_argument('-h1','--hidden_marge', help = 'hidden layer nodes for marge phase',
+                        type=int,default=80)
+    parser_training.add_argument('-h2','--hidden2_marge', help = 'hidden layer nodes2 for marge phase',
+                        type=int)
     parser_training.add_argument('-f','--feature', help = 'feature length',
                         type=int,default=80)
+    parser_training.add_argument('-a','--activation_function', help = 'activation function for output',
+                        type=str,default="softmax")
+    parser_training.add_argument('-l','--learning_model', help = 'learning_model',
+                        type=str,default="recursive")
+
+    # training option
+    parser_training.add_argument('-m','--max_margin', help = 'use maxmargin',
+                        action = 'store_true')
+
     parser_training.set_defaults(func = train)
 
 

@@ -19,7 +19,7 @@ gpu = Config.gpu
 base_length = Config.base_length
 
 class Inference:
-    def __init__(self, seq, FEATURE_SIZE):
+    def __init__(self, seq, FEATURE_SIZE, activation_function):
         self.seq=seq
         self.N=len(self.seq)
 
@@ -28,6 +28,7 @@ class Inference:
             self.sequence_vector = np.vstack((self.sequence_vector, self.base_represent(base)))
         self.sequence_vector = Variable(self.sequence_vector)
         self.FEATURE_SIZE = FEATURE_SIZE
+        self.activation_function = activation_function
 
     def pair_check(self,tup):
         if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
@@ -51,16 +52,16 @@ class Inference:
             #     return Variable(xp.array([[0,0,0,0]] , dtype=np.float32))
         else:
             if base in ['A' ,'a']:
-                return np.array([[1,0,0,0]] , dtype=np.float32)
+                return np.array([[1,0,0,0,0]] , dtype=np.float32)
             elif base in ['U' ,'u']:
-                return np.array([[0,1,0,0]] , dtype=np.float32)
+                return np.array([[0,1,0,0,0]] , dtype=np.float32)
             elif base in ['G' ,'g']:
-                return np.array([[0,0,1,0]] , dtype=np.float32)
+                return np.array([[0,0,1,0,0]] , dtype=np.float32)
             elif base in ['C' ,'c']:
-                return np.array([[0,0,0,1]] , dtype=np.float32)
+                return np.array([[0,0,0,1,0]] , dtype=np.float32)
             else:
                 # print(base)
-                return np.array([[0,0,0,0]] , dtype=np.float32)
+                return np.array([[0,0,0,0,0]] , dtype=np.float32)
 
         # else:
         #     if base in ['A' ,'a']:
@@ -298,8 +299,13 @@ class Inference:
 
     def ComputeInsideOutside(self, model):
         self.model = model
-        # BP = [[0 for i in range(self.N)] for j in range(self.N)]
-        BP = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
+        if self.activation_function == "softmax":
+            BP = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
+        elif self.activation_function == "sigmoid":
+            BP = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
+        else:
+            print("enexpected function")
+        Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)),
         FM_inside = self.Compute_Inside()
         FM_outside = self.Compute_Outside()
 
@@ -311,7 +317,7 @@ class Inference:
         # cuda.get_device(gpu_device).use()
         # model.to_gpu(gpu_device)
         # xp = cuda.cupy
-
+        #
         #define feature matrix
         #use gpu
         # if gpu == True:
@@ -337,8 +343,54 @@ class Inference:
                 x = F.hstack((FM_inside[self.hash_for_inside(0, n) : ], FM_outside[self.hash_for_outside(0, n) : : -1])).reshape(self.N-n, -1)
             else:
                 x = F.hstack((FM_inside[self.hash_for_inside(0, n) : self.hash_for_inside(0, n+1)], FM_outside[self.hash_for_outside(0, n) : self.hash_for_outside(0, n+1) : -1])).reshape(self.N-n, -1)
-            BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
+            # BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
+            if self.activation_function == "softmax":
+                BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,2)))
+            elif self.activation_function == "sigmoid":
+                BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
+            else:
+                print("enexpected function")
+
         # print(' merge : '+str(time() - start_merge)+'sec')
+        return BP
+
+    def ComputeNeighbor(self, model):
+        self.model = model
+        if self.activation_function == "softmax":
+            BP = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
+        elif self.activation_function == "sigmoid":
+            BP = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
+        else:
+            print("enexpected function")
+        neighbor = 20
+        sequence_vector_neighbor = self.sequence_vector.reshape(self.N,base_length)
+        sequence_vector_neighbor = F.vstack((sequence_vector_neighbor, Variable(np.zeros((neighbor, base_length), dtype=np.float32)) ))
+        sequence_vector_neighbor = F.vstack((Variable(np.zeros((neighbor, base_length), dtype=np.float32)) , sequence_vector_neighbor))
+
+        side_input_size =  base_length * (neighbor * 2 +1)
+        side_input_vector = Variable(np.empty((0, side_input_size), dtype=np.float32))
+        for base in range(0, self.N):
+            side_input_vector = F.vstack((side_input_vector, sequence_vector_neighbor[base:base+(neighbor * 2 + 1)].reshape(1,side_input_size)))
+        all_input_vector = Variable(np.empty((0, side_input_size*2), dtype=np.float32))
+
+        for interval in range(1, self.N):
+            left = side_input_vector[0 : self.N - interval]
+            right = side_input_vector[interval : self.N]
+            x = F.hstack((left, right))
+
+            if interval <= neighbor:
+                row = self.N-interval
+                column = (neighbor-interval+1)*2
+                surplus = Variable(np.array([0,0,0,0,1] * row * column).reshape(row * base_length, column), dtype=np.float32))
+
+
+            if self.activation_function == "softmax":
+                BP = F.vstack((BP, self.model(x).reshape(self.N - interval,1,2)))
+            elif self.activation_function == "sigmoid":
+                BP = F.vstack((BP, self.model(x).reshape(self.N - interval,1,1)))
+            else:
+                print("enexpected function")
+
         return BP
 
     def buildDP2(self, BP):
@@ -384,38 +436,56 @@ class Inference:
 
     def buildDP(self, BP):
         DP = np.zeros((self.N,self.N), dtype=np.float32)
+        TP = np.empty((self.N,self.N), dtype=np.int)
+
         DP_bifarcation_row = np.zeros((self.N,self.N), dtype=np.float32)
         DP_bifarcation_column = np.zeros((self.N,self.N), dtype=np.float32)
+
 
         canonical_base_matrix = self.basepairmatrix()
 
         for n in range(1,self.N):
             if n >= 3:
-                a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
+                if self.activation_function == "softmax":
+                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
+                elif self.activation_function == "sigmoid":
+                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
+                else:
+                    print("enexpected function")
+
                 b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
                 case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a*b
                 case2 = DP[range(1,self.N-n+1),range(n,self.N)]
                 case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
                 case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N]
                 DP_diagonal = np.vstack((case1, case2, case3, case4)).max(axis=0)
+                TP_diagonal = np.vstack((case1, case2, case3, case4)).argmax(axis=0)
 
 
             else:
-                a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
+                if self.activation_function == "softmax":
+                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
+                elif self.activation_function == "sigmoid":
+                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
+                else:
+                    print("enexpected function")
+
                 b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
                 case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a*b
                 case2 = DP[range(1,self.N-n+1),range(n,self.N)]
                 case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
                 DP_diagonal = np.vstack((case1, case2, case3)).max(axis=0)
+                TP_diagonal = np.vstack((case1, case2, case3)).argmax(axis=0)
 
             DP[range(0,self.N-n),range(n,self.N)] = DP_diagonal
+            TP[range(0,self.N-n),range(n,self.N)] = TP_diagonal
+
             DP_bifarcation_row[n,0:self.N-n] = DP_diagonal
             DP_bifarcation_column[self.N-n-1,n:self.N] = DP_diagonal
+        return DP,TP
 
-        return DP
 
-
-    def traceback(self, DP, BP, i, j, pair):
+    def traceback2(self, DP, BP, i, j, pair):
         if i < j:
             # if DP[i, j] == DP[i+1, j]:
             if np.absolute(DP[i, j] - DP[i+1, j]) < 0.0001:
@@ -424,7 +494,8 @@ class Inference:
             elif np.absolute(DP[i, j] - DP[i, j-1]) < 0.0001:
                 pair = self.traceback(DP, BP, i, j-1, pair)
             # elif DP[i, j] == DP[i+1, j-1]+BP[self.hash_for_BP(i, j)].data:
-            elif np.absolute(DP[i, j] - (DP[i+1, j-1]+BP[self.hash_for_BP(i, j)].data)) < 0.0001:
+            # elif np.absolute(DP[i, j] - (DP[i+1, j-1]+BP[self.hash_for_BP(i, j)].data)) < 0.0001:
+            elif np.absolute(DP[i, j] - (DP[i+1, j-1]+BP[self.hash_for_BP(i, j),0,1].data)) < 0.0001:
                 pair = np.append(pair, [[i,j]], axis=0)
                 pair = self.traceback(DP, BP, i+1, j-1, pair)
             else:
@@ -434,16 +505,31 @@ class Inference:
                         pair = self.traceback(DP, BP, i, k, pair)
                         pair = self.traceback(DP, BP, k+1, j, pair)
                         break
-                    if(k==j-1):
-                        print("error")
+                print("can not traceback")
+                # print(np.absolute(DP[i, j] - DP[i+1, j]))
+                # print(np.absolute(DP[i, j] - DP[i, j-1]))
+
         return pair
 
+    def traceback(self, DP, BP, TP, i, j, pair):
+        if i < j:
+            if TP[i,j] == 0:
+                pair = np.append(pair, [[i,j]], axis=0)
+                pair = self.traceback(DP, BP, TP, i+1, j-1, pair)
+            elif TP[i,j] == 1:
+                pair = self.traceback(DP, BP, TP, i+1, j, pair)
+            elif TP[i,j] == 2:
+                pair = self.traceback(DP, BP, TP, i, j-1, pair)
+            else:
+                pair = self.traceback(DP, BP, TP, i, TP[i,j]-3+i+1, pair)
+                pair = self.traceback(DP, BP, TP, TP[i,j]-3+i+1+1, j, pair)
+        return pair
 
     def ComputePosterior(self, BP):
         start_DP = time()
-        DP = self.buildDP(BP)
+        DP, TP = self.buildDP(BP)
         # print(' DP : '+str(time() - start_DP)+'sec')
         start_traceback = time()
-        pair = self.traceback(DP, BP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
+        pair = self.traceback(DP, BP, TP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
         # print(' traceback : '+str(time() - start_traceback)+'sec')
         return pair

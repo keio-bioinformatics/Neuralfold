@@ -1,6 +1,7 @@
 import numpy as np
 import Config
 import Recursive
+import Deepnet
 import chainer.links as L
 import chainer.functions as F
 import Inference
@@ -17,6 +18,7 @@ from operator import itemgetter
 import math
 from joblib import Parallel, delayed
 import SStruct
+
 
 batch_num = Config.batch_num
 maximum_slots = Config.maximum_slots
@@ -47,7 +49,14 @@ class Train:
         # for x in self.seq_set:
         #     self.seq_length_set.append(len(x))
 
-        self.model = Recursive.Recursive_net(args.hidden,args.feature)
+        # self.model = Recursive.Recursive_net(args)
+        if args.learning_model == "recursive":
+            self.model = Recursive.Recursive_net(args.hidden_insideoutside,args.hidden2_insideoutside,args.feature, args.hidden_marge,args.hidden2_marge, args.activation_function)
+        elif args.learning_model == "deepnet":
+            self.model = Deepnet.Deepnet(args.hidden_insideoutside,args.hidden2_insideoutside,args.feature, args.hidden_marge,args.hidden2_marge, args.activation_function)
+        else:
+            print("unexpected network")
+
         if args.Parameters:
             serializers.load_npz(args.Parameters.name, self.model)
 
@@ -56,7 +65,10 @@ class Train:
         if args.Optimizers:
             serializers.load_npz(args.Optimizers.name, self.optimizer)
 
-        # self.FEATURE_SIZE = args.feature
+        self.activation_function = args.activation_function
+        self.feature = args.feature
+        self.max_margin = args.max_margin
+        self.test_file = args.test_file
         self.args =args
 
 
@@ -66,7 +78,14 @@ class Train:
 
     def Useloss(self,predicted_BP, seq, true_structure):
         for true_pair in true_structure:
-            predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))].data -= 0.2
+            if self.activation_function == "softmax":
+                predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq)),0,1].data -= 0.2
+                predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq)),0,0].data += 0.2
+            elif self.activation_function == "sigmoid":
+                predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))].data -= 0.2
+            else:
+                print("enexpected function")
+
         return predicted_BP
 
     def train_engine(self, seq_set, true_structure_set):
@@ -78,13 +97,23 @@ class Train:
         # optimizer.setup(model)
         step=0
         for seq, true_structure in zip(seq_set, true_structure_set):
-            print("step=",str(step))
+            # print("step=",str(step))
             step +=1
             start_BP = time()
-            inference = Inference.Inference(seq,self.args.feature)
-            predicted_BP = inference.ComputeInsideOutside(self.model)
+            inference = Inference.Inference(seq,self.feature, self.activation_function)
+            if self.args.learning_model == "recursive":
+                predicted_BP = inference.ComputeInsideOutside(self.model)
+            elif self.args.learning_model == "deepnet":
+                predicted_BP = inference.ComputeNeighbor(self.model)
+            else:
+                print("unexpected network")
+
+            # predicted_BP = inference.ComputeInsideOutside(self.model)
+
             # print(' BP : '+str(time() - start_BP)+'sec')
-            predicted_BP = self.Useloss(predicted_BP, seq, true_structure)
+            if self.max_margin:
+                predicted_BP = self.Useloss(predicted_BP, seq, true_structure)
+
             start_structure = time()
             predicted_structure = inference.ComputePosterior(predicted_BP)
             # print(' structure : '+str(time() - start_structure)+'sec')
@@ -101,19 +130,32 @@ class Train:
                 i+=1
 
             loss = 0
-            t = Variable(np.array([[0]], dtype=np.float32))
-            t2 = Variable(np.array([[1]], dtype=np.float32))
-            # count = 0
+            if self.activation_function == "softmax":
+                t = Variable(np.array([0], dtype=np.int32))
+                t2 = Variable(np.array([1], dtype=np.int32))
+            elif self.activation_function == "sigmoid":
+                t = Variable(np.array([[0]], dtype=np.float32))
+                t2 = Variable(np.array([[1]], dtype=np.float32))
+            else:
+                print("enexpected function")
             #backprop
             for predicted_pair in predicted_structure:
                 y = predicted_BP[self.hash_for_BP(predicted_pair[0], predicted_pair[1], len(seq))]
-                loss += F.mean_squared_error(y, t)
-                # count += 1
+                if self.activation_function == "softmax":
+                    loss += F.softmax_cross_entropy(y, t)
+                elif self.activation_function == "sigmoid":
+                    loss += F.mean_squared_error(y, t)
+                else:
+                    print("enexpected function")
+
             for true_pair in true_structure:
                 y = predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))]
-                loss += F.mean_squared_error(y, t2)
-                # count += 1
-            # loss = count*loss
+                if self.activation_function == "softmax":
+                    loss += F.softmax_cross_entropy(y, t2)
+                elif self.activation_function == "sigmoid":
+                    loss += F.mean_squared_error(y, t2)
+                else:
+                    print("enexpected function")
             start_backward = time()
             self.model.zerograds()
             loss.backward()
@@ -237,12 +279,17 @@ class Train:
 
             #TEST
             # if (self.seq_set_test is not None and ite == self.iters_num-1):
-            if (self.args.test_file is not None):
+            if (self.test_file is not None):
                 predicted_structure_set = []
                 print("start testing...")
                 for seq in self.seq_set_test:
-                    inference = Inference.Inference(seq,self.args.feature)
-                    predicted_BP = inference.ComputeInsideOutside(self.model)
+                    inference = Inference.Inference(seq,self.feature, self.activation_function)
+                    if self.args.learning_model == "recursive":
+                        predicted_BP = inference.ComputeInsideOutside(self.model)
+                    elif self.args.learning_model == "deepnet":
+                        predicted_BP = inference.ComputeNeighbor(self.model)
+                    else:
+                        print("unexpected network")
                     predicted_structure_set.append(inference.ComputePosterior(predicted_BP))
                 evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
                 Sensitivity, PPV, F_value = evaluate.getscore()

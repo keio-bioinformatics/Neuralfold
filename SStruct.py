@@ -31,7 +31,7 @@ class SStruct:
                     stack = np.delete(stack, -1)
                 i+=1
             structure_set.append(structure)
-            #structure=np.append(structure,line.replace('\n' , ''))
+            structure=np.append(structure,line.replace('\n' , ''))
             if len(line)>50:
                 name_set = np.delete(name_set, -1)
                 seq_set = np.delete(seq_set,-1)
