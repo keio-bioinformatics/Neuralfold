@@ -36,9 +36,9 @@ def main():
 
     # add subparser for training
     parser_training = subparser.add_parser('train', help='training RNA secondary structures')
-    parser_training.add_argument('train_file', help = 'FASTA file for training',
+    parser_training.add_argument('train_file', help = 'FASTA file for training', nargs='+',
                         type=argparse.FileType('r'))
-    parser_training.add_argument('-t','--test_file', help = 'FASTA file for test',
+    parser_training.add_argument('-t','--test_file', help = 'FASTA file for test', nargs='+',
                         type=argparse.FileType('r'))
     parser_training.add_argument('-p','--Parameters', help = 'Parameter file',
                         type=argparse.FileType('r'))
@@ -46,6 +46,8 @@ def main():
                         type=argparse.FileType('r'))
     parser_training.add_argument('-i','--iteration', help = 'number of iteration',
                         type=int,default=1)
+    parser_training.add_argument('-bp','--bpseq', help = 'use bpseq',
+                        action = 'store_true')
 
     # neural networks architecture
     parser_training.add_argument('-H1','--hidden_insideoutside', help = 'hidden layer nodes for inside outside',
@@ -63,8 +65,34 @@ def main():
     parser_training.add_argument('-l','--learning_model', help = 'learning_model',
                         type=str,default="recursive")
 
+    parser_training.add_argument('-hn1','--hidden1', help = 'hidden layer nodes for neighbor model',
+                        type=int,default=200)
+    parser_training.add_argument('-hn2','--hidden2', help = 'hidden layer nodes2 for neighbor model',
+                        type=int)
+    parser_training.add_argument('-hn3','--hidden3', help = 'hidden layer nodes for neighbor model',
+                        type=int)
+    parser_training.add_argument('-n','--neighbor', help = 'length of neighbor bases to see',
+                        type=int,default=40)
+
+
+
+
     # training option
     parser_training.add_argument('-m','--max_margin', help = 'use maxmargin',
+                        action = 'store_true')
+    parser_training.add_argument('-c','--count', help = 'Multiply the error by count',
+                        action = 'store_true')
+    parser_training.add_argument('-u','--unpair_score', help = 'unpair score used in the nussinov algorithm',
+                        type=float, default=0.15)
+    parser_training.add_argument('-uw','--unpair_weight', help = 'learn unpair weight',
+                        action = 'store_true')
+    parser_training.add_argument('-s','--small_structure', help = 'train only small structure',
+                        action = 'store_true')
+    parser_training.add_argument('-fu','--fully_learn', help = 'calucurate loss for all canonical pair',
+                        action = 'store_true')
+    parser_training.add_argument('-th','--threshold', help = 'use Threshold in the nussinov algorithm',
+                        action = 'store_true')
+    parser_training.add_argument('-ip','--ipknot', help = 'predict pseudoknot secaondary structure',
                         action = 'store_true')
 
     parser_training.set_defaults(func = train)
