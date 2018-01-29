@@ -6,8 +6,9 @@ class SStruct:
         self.small_structure = small_structure
 
     def load_FASTA(self):
-        # f = open(self.filename)
-        f = self.filename
+        # print(self.filename)
+        # f = open(self.filename.name)
+        f = self.filename[0]
         line = f.readline()
 
         name_set = np.array([])
@@ -64,7 +65,7 @@ class SStruct:
             seq_set = np.append(seq_set, ''.join(seq))
             structure_set.append(structure)
             if self.small_structure:
-                if len(seq_set[-1])>30:
+                if len(seq_set[-1])>40:
                     seq_set = np.delete(seq_set,-1)
                     structure_set.pop(-1)
 

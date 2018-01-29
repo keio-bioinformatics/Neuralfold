@@ -80,6 +80,8 @@ class Train:
         self.fully_learn = args.fully_learn
         self.ipknot = args.ipknot
         self.test_file = args.test_file
+        self.gamma = 2**(args.gamma)+1
+        print(self.gamma)
         self.args =args
 
 
@@ -168,8 +170,10 @@ class Train:
         step=0
         for seq, true_structure in zip(seq_set, true_structure_set):
             print("step=",str(step))
-            print(seq)
-            print(true_structure)
+            # if (seq=="GGGAAACGGGCAGGCGGCGGCGACCGCCGAAACAACCGC"):
+            #     continue
+            # print(seq)
+            # print(true_structure)
             step +=1
             start_BP = time()
             inference = Inference.Inference(seq,self.feature, self.activation_function,self.unpair_weight)
@@ -182,7 +186,7 @@ class Train:
 
             # predicted_BP = inference.ComputeInsideOutside(self.model)
 
-            # print(' BP : '+str(time() - start_BP)+'sec')
+            print(' BP : '+str(time() - start_BP)+'sec')
             if self.max_margin:
                 predicted_BP = self.Useloss(predicted_BP, seq, true_structure)
 
@@ -237,8 +241,17 @@ class Train:
 
             else:
                 start_structure = time()
-                predicted_structure = inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot)
-                # print(' structure : '+str(time() - start_structure)+'sec')
+                length = len(seq)
+                true_structure_matrix = np.zeros((length,length), dtype=np.float32)
+                for true_pair in true_structure:
+                    true_structure_matrix[true_pair[0], true_pair[1]] = self.unpair_score
+
+                # predicted_structure = inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Train")
+                # predicted_structure = inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Train",true_structure_matrix)
+                predicted_structure = inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Train",true_structure_matrix)
+                if len(predicted_structure)==0:
+                    continue
+                print(' structure : '+str(time() - start_structure)+'sec')
 
                 i = 0
                 for predicted_pair in predicted_structure:
@@ -393,8 +406,8 @@ class Train:
                 list_for_shuffle = list(zip(self.seq_set, self.structure_set))
                 random.shuffle(list_for_shuffle)
                 seq_set, structure_set = zip(*list_for_shuffle)
-                # self.model = self.train_engine(seq_set, structure_set)
                 self.train_engine(seq_set, structure_set)
+
                 # print(str(i)+"/"+str(len(self.seq_set)))
 
 
@@ -407,33 +420,47 @@ class Train:
             serializers.save_npz('my.state', self.optimizer)
 
             #TEST
-            if (self.seq_set_test is not None and ite == self.iters_num-1):
-            # if (self.test_file is not None):
-                predicted_structure_set = []
-                print("start testing...")
-                for seq in self.seq_set_test:
-                    inference = Inference.Inference(seq,self.feature, self.activation_function, self.unpair_weight)
-                    if self.args.learning_model == "recursive":
-                        predicted_BP = inference.ComputeInsideOutside(self.model)
-                    elif self.args.learning_model == "deepnet":
-                        # predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
-                        predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
-                    else:
-                        print("unexpected network")
+            # if (self.seq_set_test is not None and ite == self.iters_num-1):
+            # if (self.seq_set_test is not None and (ite % 10)==9 ):
+            if (self.test_file is not None):
+                i=-5
+                # while i<10:
+                while i<-4:
+                    # self.gamma = 2**(i)+1
+                    i+=1
 
-                    if self.unpair_weight:
-                        predicted_structure, predicted_unpair_left, predicted_unpair_right = inference.ComputePosterior_with_unpair(predicted_BP, predicted_UP_left, predicted_UP_right)
-                        predicted_structure_set.append(predicted_structure)
-                    else:
-                        predicted_structure_set.append(inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot))
-                evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
-                Sensitivity, PPV, F_value = evaluate.getscore()
+                    predicted_structure_set = []
+                    print("start testing...")
+                    for seq in self.seq_set_test:
+                        inference = Inference.Inference(seq,self.feature, self.activation_function, self.unpair_weight)
+                        if self.args.learning_model == "recursive":
+                            predicted_BP = inference.ComputeInsideOutside(self.model)
+                        elif self.args.learning_model == "deepnet":
+                            # predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
+                            predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
+                        else:
+                            print("unexpected network")
 
-                file = open('result.txt', 'a')
+                        if self.unpair_weight:
+                            predicted_structure, predicted_unpair_left, predicted_unpair_right = inference.ComputePosterior_with_unpair(predicted_BP, predicted_UP_left, predicted_UP_right)
+                            predicted_structure_set.append(predicted_structure)
+                        else:
+                            # predicted_structure=inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
+                            predicted_structure=inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
+                            # predicted_structure_set.append(inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot,"Test"))
+                            if len(predicted_structure)==0:
+                                continue
+                            predicted_structure_set.append(predicted_structure)
 
-                result = ['Sensitivity=', str(round(Sensitivity,5)),' ', 'PPV=', str(round(PPV,5)),' ','F_value=', str(round(F_value,5)),'\n']
-                file.writelines(result)
-                file.close()
+                    evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
+                    Sensitivity, PPV, F_value = evaluate.getscore()
+
+                    file = open('result.txt', 'a')
+
+                    result = ['Sensitivity=', str(round(Sensitivity,5)),' ', 'PPV=', str(round(PPV,5)),' ','F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
+                    file.writelines(result)
+
+                    file.close()
                 print(Sensitivity, PPV, F_value)
 
             # print('ite'+str(ite)+': it cost '+str(time() - start)+'sec')

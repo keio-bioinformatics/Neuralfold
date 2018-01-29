@@ -73,6 +73,8 @@ def main():
                         type=int)
     parser_training.add_argument('-n','--neighbor', help = 'length of neighbor bases to see',
                         type=int,default=40)
+    parser_training.add_argument('-g','--gamma', help = 'balance between the sensitivity and specificity ',
+                        type=int,default=1)
 
 
 
@@ -83,7 +85,7 @@ def main():
     parser_training.add_argument('-c','--count', help = 'Multiply the error by count',
                         action = 'store_true')
     parser_training.add_argument('-u','--unpair_score', help = 'unpair score used in the nussinov algorithm',
-                        type=float, default=0.15)
+                        type=float, default=0.1)
     parser_training.add_argument('-uw','--unpair_weight', help = 'learn unpair weight',
                         action = 'store_true')
     parser_training.add_argument('-s','--small_structure', help = 'train only small structure',

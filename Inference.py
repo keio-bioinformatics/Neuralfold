@@ -11,6 +11,10 @@ from time import time
 import math
 import random
 import pulp
+import signal
+from pulp import *
+import cplex
+from inspect import signature
 
 min_loop_length = Config.min_loop_length
 # self.FEATURE_SIZE = Config.feature_length
@@ -470,7 +474,8 @@ class Inference:
         all_bases[all_bases == 0] = -1000
         return all_bases
 
-    def buildDP(self, BP, unpair_score):
+    # def buildDP(self, BP, unpair_score):
+    def buildDP(self, BP, unpair_score,true_structure_matrix):
         DP = np.zeros((self.N,self.N), dtype=np.float32)
         TP = np.empty((self.N,self.N), dtype=np.int)
 
@@ -493,8 +498,10 @@ class Inference:
                 c = a*b
                 c[a<0.1] = -1000
                 case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + c
-                case2 = DP[range(1,self.N-n+1),range(n,self.N)] + unpair_score
-                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + unpair_score
+                # case2 = DP[range(1,self.N-n+1),range(n,self.N)] + unpair_score
+                case2 = DP[range(1,self.N-n+1),range(n,self.N)] + true_structure_matrix[range(1,self.N-n+1),range(n,self.N)]
+                # case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + unpair_score
+                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + true_structure_matrix[range(1,self.N-n+1),range(n,self.N)]
                 case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N] + unpair_score
                 DP_diagonal = np.vstack((case1, case2, case3, case4)).max(axis=0)
                 TP_diagonal = np.vstack((case1, case2, case3, case4)).argmax(axis=0)
@@ -566,96 +573,163 @@ class Inference:
         return pair
 
 
-    def ipknot(self, bp, th):
+    def signal_handler(signum, frame):
+        raise Exception("Timed out!")
+
+    def ipknot(self, bp, th, mode):
         prob = pulp.LpProblem("IPknot", pulp.LpMaximize)
         seqlen = self.N
         nlevels = len(th)
 
-        print("here")
+        canonical_base_matrix = self.basepairmatrix()
+
         # variables
         x = [[[None for i in range(seqlen)] for j in range(seqlen)] for k in range(nlevels)]
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
-                    if float(bp[self.hash_for_BP(i, j)].data) >= th[k]:
+                    if float(bp[self.hash_for_BP(i, j)].data) >= th[k] and canonical_base_matrix[i,j] == 1:
                         x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
-        # print("koko")
+
         # objective function
-        # o = [(float(bp[self.hash_for_BP(i, j)].data)-th[k]) * x[k][i][j]
-        #      for k in range(nlevels) for j in range(seqlen) for i in range(j) if x[k][i][j] is not None]
-        o = 0
-        for k in range(nlevels):
-            for j in range(seqlen):
-                for i in range(j):
-                    if x[k][i][j] is not None:
-                        # if float(bp[self.hash_for_BP(i, j)].data) >=1:
-                        #     bp[self.hash_for_BP(i, j)].data =1
-                        o += (float(bp[self.hash_for_BP(i, j)].data)-th[k]) * x[k][i][j]
-        prob += o
-        print("here1")
+        o = [(float(bp[self.hash_for_BP(i, j)].data)-th[k]) * x[k][i][j]
+             for k in range(nlevels) for j in range(seqlen) for i in range(j) if x[k][i][j] is not None]
+        prob += pulp.lpSum(o)
+        # o = 0
+        # for k in range(nlevels):
+        #     for j in range(seqlen):
+        #         for i in range(j):
+        #             if x[k][i][j] is not None:
+        #                 # if float(bp[self.hash_for_BP(i, j)].data) >=1:
+        #                 #     bp[self.hash_for_BP(i, j)].data =1
+        #                 o += (float(bp[self.hash_for_BP(i, j)].data)-th[k]) * x[k][i][j]
+        # prob += o
 
         # constraints 1
-        # for i in range(seqlen):
-        #     prob += sum([x[k][i][j] for j in range(seqlen) for k in range(nlevels) if x[k][i][j] is not None]) <= 1
-
-
         for i in range(seqlen):
-            o = 0
-            for j in range(seqlen):
-                 for k in range(nlevels):
-                      if x[k][i][j] is not None:
-                        o += x[k][i][j]
-            prob += o <= 1
+            prob += pulp.lpSum([x[k][i][j] for j in range(seqlen) for k in range(nlevels) if x[k][i][j] is not None]) <= 1
 
-        print("here2")
-        # constraints 2
-        for k in range(nlevels):
-            for j2 in range(seqlen):
-                for j1 in range(j2):
-                    for i2 in range(j1):
-                        if x[k][i2][j2] is not None:
-                            for i1 in range(i2):
-                                if x[k][i1][j1] is not None:
-                                    prob += x[k][i1][j1] + x[k][i2][j2] <= 1
-        print("here3")
-        # constraints 3
-        for k2 in range(nlevels):
-            for j2 in range(seqlen):
-                for i2 in range(j2):
-                    if x[k2][i2][j2] is not None:
-                        for k1 in range(k2):
-                            o = 0
-                            # c1 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(i2-1) if x[k1][j1][j1] is not None]
-                            # c2 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(j2+1, seqlen) if x[k1][i1][j1] is not None]
-                            for i1 in range(i2+1, j2):
-                                for j1 in range(i2-1):
-                                    if x[k1][j1][j1] is not None:
-                                        o+=x[k1][i1][j1]
-                            for i1 in range(i2+1, j2):
-                                for j1 in range(j2+1, seqlen):
-                                    if x[k1][i1][j1] is not None:
-                                        o+=x[k1][i1][j1]
-                            prob += o >= x[k2][i2][j2]
 
-        print("here4")
+        # for i in range(seqlen):
+        #     o = 0
+        #     for j in range(seqlen):
+        #          for k in range(nlevels):
+        #               if x[k][i][j] is not None:
+        #                 o += x[k][i][j]
+        #     prob += o <= 1
+
+        if mode == "Test" or mode=="Train":
+        # if mode == "Test":
+        # if mode == None:
+            # constraints 2
+            for k in range(nlevels):
+                for j2 in range(seqlen):
+                    for j1 in range(j2):
+                        for i2 in range(j1):
+                            if x[k][i2][j2] is not None:
+                                for i1 in range(i2):
+                                    if x[k][i1][j1] is not None:
+                                        prob += pulp.lpSum(x[k][i1][j1] + x[k][i2][j2]) <= 1
+
+        if mode == "Test" or mode=="Train":
+        # if mode == "Test":
+        # if mode == None:
+            # constraints 3
+            for k2 in range(nlevels):
+                for j2 in range(seqlen):
+                    for i2 in range(j2):
+                        if x[k2][i2][j2] is not None:
+                            for k1 in range(k2):
+                                # o = 0
+                                c1 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(i2-1) if x[k1][j1][j1] is not None]
+                                c2 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(j2+1, seqlen) if x[k1][i1][j1] is not None]
+                                prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
+                                # for i1 in range(i2+1, j2):
+                                #     for j1 in range(i2-1):
+                                #         if x[k1][j1][j1] is not None:
+                                #             o+=x[k1][i1][j1]
+                                # for i1 in range(i2+1, j2):
+                                #     for j1 in range(j2+1, seqlen):
+                                #         if x[k1][i1][j1] is not None:
+                                #             o+=x[k1][i1][j1]
+                                # prob += o >= x[k2][i2][j2]
+
+
         # solve the IP problem
-        prob.solve()
+        # signal.signal( signal.SIGALRM, self.signal_handler )
+        # signal.alarm( 30 ) # 60 seconds alarm
+        # try:
+        #     prob.solve(pulp.COIN_CMD())
+        #     signal.alarm(0) # make it disable alarm.
+        # except Exception:
+        #     print ("Timed out!")
+        #     return np.empty((0,2),dtype=np.int16)
+        start_ip = time()
+        print(self.N)
+        # print(signature(CPLEX))
+
+        # solver = CPLEX()
+        # prob.solve(pulp.GLPK_CMD())
+        # prob.solve(pulp.PULP_CBC_CMD(threads=100))
+        # prob.solve(pulp.PULP_CBC_CMD(threads=20,maxSeconds="120"))
+        # prob.solve()
+        # prob.solve(CPLEX(path="/usr/ilog/cplex/"))
+        # prob.solve(CPLEX_DLL(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
+        try:
+            # prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex",timelimit=1000))
+            # prob.solve(CPLEX())
+            prob.solve(CPLEX(timeLimit=1000, msg=False))
+            # prob.solve(CPLEX(timeLimit=10000, msg=False))
+            # prob.solve()
+            # prob.solve(CPLEX(msg=False))
+            # prob.solve(CPLEX_CMD())
+
+            # prob.solve(CPLEX_PY( msg=False))
+            # prob.solve(CPLEX_PY())
+            # if mode == "Train":
+            #     prob.solve()
+            # elif mode == "Test":
+            #     prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
+        except KeyError as e:
+            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            print(e)
+            pair = np.empty((0,2),dtype=np.int16)
+            return pair
+
+        print(' ipknot : '+str(time() - start_ip)+'sec')
+        # prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
+
         # print(prob.objective.value())
-        print("here5")
+        y = ['.']*seqlen
         pair = np.empty((0,2),dtype=np.int16)
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
                     if x[k][i][j] is not None and x[k][i][j].value() == 1:
                         pair = np.append(pair, [[i,j]], axis=0)
+                        # print(i,j)
+                        # print(self.seq[i],self.seq[j])
+                        y[i] = ['(', '[', '{', '<'][k]
+                        y[j] = [')', ']', '}', '>'][k]
+        if mode == "Test":
+            print("".join(y))
+            print(self.seq)
         return pair
 
-    def ComputePosterior(self, BP, unpair_score, ipknot):
+    # def ComputePosterior(self, BP, unpair_score, ipknot, gamma, mode):
+    def ComputePosterior(self, BP, unpair_score, ipknot, gamma, mode,true_structure_matrix):
         start_DP = time()
+        BP = BP * gamma
         if ipknot:
-            pair = self.ipknot(BP, [0.1, 0.1])
+            if mode == "Train":
+                pair = self.ipknot(BP, [0.1, 0.1], mode)
+            elif mode == "Test":
+                pair = self.ipknot(BP, [0.1, 0.1], mode)
         else:
-            DP, TP = self.buildDP(BP, unpair_score)
+            # DP, TP = self.buildDP(BP, unpair_score)
+            # if "Test":
+            #     true_structure_matrix=np.zeros((self.N,self.N), dtype=np.float32)
+            DP, TP = self.buildDP(BP, unpair_score,true_structure_matrix)
             # print(' DP : '+str(time() - start_DP)+'sec')
             start_traceback = time()
             pair = self.traceback(DP, BP, TP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
