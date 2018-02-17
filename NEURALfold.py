@@ -61,7 +61,7 @@ def main():
     parser_training.add_argument('-f','--feature', help = 'feature length',
                         type=int,default=80)
     parser_training.add_argument('-a','--activation_function', help = 'activation function for output',
-                        type=str,default="softmax")
+                        type=str,default="sigmoid")
     parser_training.add_argument('-l','--learning_model', help = 'learning_model',
                         type=str,default="recursive")
 
@@ -94,7 +94,7 @@ def main():
                         action = 'store_true')
     parser_training.add_argument('-th','--threshold', help = 'use Threshold in the nussinov algorithm',
                         action = 'store_true')
-    parser_training.add_argument('-ip','--ipknot', help = 'predict pseudoknot secaondary structure',
+    parser_training.add_argument('-ip','--ipknot', help = 'predict pseudoknotted secaondary structure',
                         action = 'store_true')
 
     parser_training.set_defaults(func = train)
@@ -106,6 +106,26 @@ def main():
                         type=argparse.FileType('r'))
     parser_test.add_argument('-p','--Parameters', help = 'Parameter file',
                         type=argparse.FileType('r'))
+    parser_test.add_argument('-bp','--bpseq', help = 'use bpseq',
+                        action = 'store_true')
+    parser_test.add_argument('-ip','--ipknot', help = 'predict pseudoknotted secaondary structure',
+                        action = 'store_true')
+    parser_test.add_argument('-hn1','--hidden1', help = 'hidden layer nodes for neighbor model',
+                        type=int,default=200)
+    parser_test.add_argument('-hn2','--hidden2', help = 'hidden layer nodes2 for neighbor model',
+                        type=int,default=50)
+    parser_test.add_argument('-hn3','--hidden3', help = 'hidden layer nodes for neighbor model',
+                        type=int)
+    parser_test.add_argument('-n','--neighbor', help = 'length of neighbor bases to see',
+                        type=int,default=40)
+    parser_test.add_argument('-g','--gamma', help = 'balance between the sensitivity and specificity ',
+                        type=int,default=1)
+    parser_test.add_argument('-f','--feature', help = 'feature length',
+                        type=int,default=80)
+    parser_test.add_argument('-a','--activation_function', help = 'activation function for output',
+                        type=str,default="sigmoid")
+
+
     parser_test.set_defaults(func = test)
 
     args = parser.parse_args()

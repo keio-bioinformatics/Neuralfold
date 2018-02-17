@@ -618,41 +618,35 @@ class Inference:
         #                 o += x[k][i][j]
         #     prob += o <= 1
 
-        if mode == "Test" or mode=="Train":
-        # if mode == "Test":
-        # if mode == None:
-            # constraints 2
-            for k in range(nlevels):
-                for j2 in range(seqlen):
-                    for j1 in range(j2):
-                        for i2 in range(j1):
-                            if x[k][i2][j2] is not None:
-                                for i1 in range(i2):
-                                    if x[k][i1][j1] is not None:
-                                        prob += pulp.lpSum(x[k][i1][j1] + x[k][i2][j2]) <= 1
+        # constraints 2
+        for k in range(nlevels):
+            for j2 in range(seqlen):
+                for j1 in range(j2):
+                    for i2 in range(j1):
+                        if x[k][i2][j2] is not None:
+                            for i1 in range(i2):
+                                if x[k][i1][j1] is not None:
+                                    prob += pulp.lpSum(x[k][i1][j1] + x[k][i2][j2]) <= 1
 
-        if mode == "Test" or mode=="Train":
-        # if mode == "Test":
-        # if mode == None:
-            # constraints 3
-            for k2 in range(nlevels):
-                for j2 in range(seqlen):
-                    for i2 in range(j2):
-                        if x[k2][i2][j2] is not None:
-                            for k1 in range(k2):
-                                # o = 0
-                                c1 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(i2-1) if x[k1][j1][j1] is not None]
-                                c2 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(j2+1, seqlen) if x[k1][i1][j1] is not None]
-                                prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
-                                # for i1 in range(i2+1, j2):
-                                #     for j1 in range(i2-1):
-                                #         if x[k1][j1][j1] is not None:
-                                #             o+=x[k1][i1][j1]
-                                # for i1 in range(i2+1, j2):
-                                #     for j1 in range(j2+1, seqlen):
-                                #         if x[k1][i1][j1] is not None:
-                                #             o+=x[k1][i1][j1]
-                                # prob += o >= x[k2][i2][j2]
+        # constraints 3
+        for k2 in range(nlevels):
+            for j2 in range(seqlen):
+                for i2 in range(j2):
+                    if x[k2][i2][j2] is not None:
+                        for k1 in range(k2):
+                            # o = 0
+                            c1 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(i2-1) if x[k1][j1][j1] is not None]
+                            c2 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(j2+1, seqlen) if x[k1][i1][j1] is not None]
+                            prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
+                            # for i1 in range(i2+1, j2):
+                            #     for j1 in range(i2-1):
+                            #         if x[k1][j1][j1] is not None:
+                            #             o+=x[k1][i1][j1]
+                            # for i1 in range(i2+1, j2):
+                            #     for j1 in range(j2+1, seqlen):
+                            #         if x[k1][i1][j1] is not None:
+                            #             o+=x[k1][i1][j1]
+                            # prob += o >= x[k2][i2][j2]
 
 
         # solve the IP problem
@@ -712,8 +706,8 @@ class Inference:
                         y[i] = ['(', '[', '{', '<'][k]
                         y[j] = [')', ']', '}', '>'][k]
         if mode == "Test":
-            print("".join(y))
             print(self.seq)
+            print("".join(y))
         return pair
 
     # def ComputePosterior(self, BP, unpair_score, ipknot, gamma, mode):
@@ -733,6 +727,13 @@ class Inference:
             # print(' DP : '+str(time() - start_DP)+'sec')
             start_traceback = time()
             pair = self.traceback(DP, BP, TP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
+            y = ['.']*len(self.seq)
+            for p in pair:
+                y[p[0]] = '('
+                y[p[1]] = ')'
+            print(self.seq)
+            print("".join(y))
+
             # print(' traceback : '+str(time() - start_traceback)+'sec')
         return pair
 

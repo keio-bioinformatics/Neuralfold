@@ -423,43 +423,35 @@ class Train:
             # if (self.seq_set_test is not None and ite == self.iters_num-1):
             # if (self.seq_set_test is not None and (ite % 10)==9 ):
             if (self.test_file is not None):
-                i=-5
-                # while i<10:
-                while i<-4:
-                    # self.gamma = 2**(i)+1
-                    i+=1
+                predicted_structure_set = []
+                print("start testing...")
+                for seq in self.seq_set_test:
+                    inference = Inference.Inference(seq,self.feature, self.activation_function, self.unpair_weight)
+                    if self.args.learning_model == "recursive":
+                        predicted_BP = inference.ComputeInsideOutside(self.model)
+                    elif self.args.learning_model == "deepnet":
+                        # predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
+                        predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
+                    else:
+                        print("unexpected network")
 
-                    predicted_structure_set = []
-                    print("start testing...")
-                    for seq in self.seq_set_test:
-                        inference = Inference.Inference(seq,self.feature, self.activation_function, self.unpair_weight)
-                        if self.args.learning_model == "recursive":
-                            predicted_BP = inference.ComputeInsideOutside(self.model)
-                        elif self.args.learning_model == "deepnet":
-                            # predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
-                            predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
-                        else:
-                            print("unexpected network")
-
-                        if self.unpair_weight:
-                            predicted_structure, predicted_unpair_left, predicted_unpair_right = inference.ComputePosterior_with_unpair(predicted_BP, predicted_UP_left, predicted_UP_right)
-                            predicted_structure_set.append(predicted_structure)
-                        else:
-                            # predicted_structure=inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
-                            predicted_structure=inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
-                            # predicted_structure_set.append(inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot,"Test"))
-                            if len(predicted_structure)==0:
-                                continue
-                            predicted_structure_set.append(predicted_structure)
+                    if self.unpair_weight:
+                        predicted_structure, predicted_unpair_left, predicted_unpair_right = inference.ComputePosterior_with_unpair(predicted_BP, predicted_UP_left, predicted_UP_right)
+                        predicted_structure_set.append(predicted_structure)
+                    else:
+                        # predicted_structure=inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
+                        predicted_structure=inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
+                        # predicted_structure_set.append(inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot,"Test"))
+                        if len(predicted_structure)==0:
+                            continue
+                        predicted_structure_set.append(predicted_structure)
 
                     evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
                     Sensitivity, PPV, F_value = evaluate.getscore()
 
                     file = open('result.txt', 'a')
-
                     result = ['Sensitivity=', str(round(Sensitivity,5)),' ', 'PPV=', str(round(PPV,5)),' ','F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
                     file.writelines(result)
-
                     file.close()
                 print(Sensitivity, PPV, F_value)
 

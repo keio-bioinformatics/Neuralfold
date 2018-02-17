@@ -5,6 +5,7 @@ import chainer.links as L
 import chainer.functions as F
 import Inference
 import SStruct
+import Deepnet
 import Evaluate
 #import chainer
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
@@ -15,31 +16,37 @@ batch_num = Config.batch_num
 
 class Test:
     def __init__(self, args):
-        sstruct = SStruct.SStruct(args.test_file)
-        self.name_set_test, self.seq_set_test, self.structure_set_test = sstruct.load_FASTA()
-        self.model =  Recursive.Recursive_net()
+
+        sstruct = SStruct.SStruct(args.test_file, False)
+        if args.bpseq:
+            self.name_set, self.seq_set, self.structure_set = sstruct.load_BPseq()
+        else:
+            self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
+
+        self.model = Deepnet.Deepnet(args.hidden1, args.hidden2, args.hidden3, args.activation_function)
+
         if args.Parameters:
             serializers.load_npz(args.Parameters.name, self.model)
-        self.args = args
+        else:
+            serializers.load_npz("NEURALfold_params.data", self.model)
 
-    def test_Parallel(self,seq):
-        inference = Inference.Inference(seq,80)
-        predicted_BP = inference.ComputeInsideOutside(self.model)
-        # print(predicted_BP)
-        return inference.ComputePosterior(predicted_BP)
+        self.neighbor = args.neighbor
+        self.feature = args.feature
+        self.activation_function = args.activation_function
+        self.ipknot = args.ipknot
+        self.test_file = args.test_file
+        self.gamma = 2**(args.gamma)+1
+        self.args =args
 
     def test(self):
-        # p= Pool(maximum_slots)
-        # p= Pool(batch_num)
-        # p= Pool(2)
-        # p= Pool(multi.cpu_count())
-        # predicted_structure_set = p.map(self.test_Parallel, self.seq_set_test)
-        # p.close()
         predicted_structure_set = []
-        for seq in self.seq_set_test:
-            inference = Inference.Inference(seq,80)
-            predicted_BP = inference.ComputeInsideOutside(self.model)
-            predicted_structure_set.append(inference.ComputePosterior(predicted_BP))
-        evaluate = Evaluate.Evaluate(predicted_structure_set , self.structure_set_test)
+
+        for seq in self.seq_set:
+            inference = Inference.Inference(seq,self.feature, self.activation_function,False)
+            predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
+            predicted_structure=inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
+            predicted_structure_set.append(predicted_structure)
+
+        evaluate = Evaluate.Evaluate(predicted_structure_set , self.structure_set)
         Sensitivity, PPV, F_value = evaluate.getscore()
         return Sensitivity, PPV, F_value

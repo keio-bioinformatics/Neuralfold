@@ -8,7 +8,8 @@ class SStruct:
     def load_FASTA(self):
         # print(self.filename)
         # f = open(self.filename.name)
-        f = self.filename[0]
+        # f = self.filename[0]
+        f = self.filename
         line = f.readline()
 
         name_set = np.array([])
