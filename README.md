@@ -32,7 +32,7 @@ GGAUGGAUGUCUGAGCGGUUGAAAGAGUCGGUCUUGAAAACCGAAGUAUUGAUAGGAAUACCGGGGGUUCGAAUCCCUCU
 ```
 If you want to predict pseudoknotted seconrdary structure, use "-ip" option.
 ```
-% python NEURALfold.py test sample.fa
+% python NEURALfold.py test sample.fa -ip
 start testing...
 > DS4440
 GGAUGGAUGUCUGAGCGGUUGAAAGAGUCGGUCUUGAAAACCGAAGUAUUGAUAGGAAUACCGGGGGUUCGAAUCCCUCUCCAUCCG
