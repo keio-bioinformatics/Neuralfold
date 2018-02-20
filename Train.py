@@ -5,7 +5,7 @@ import Deepnet
 import chainer.links as L
 import chainer.functions as F
 import Inference
-from tqdm import tqdm
+# from tqdm import tqdm
 from time import time
 import Test
 import Evaluate
@@ -16,7 +16,7 @@ from multiprocessing import Pool
 import multiprocessing as multi
 from operator import itemgetter
 import math
-from joblib import Parallel, delayed
+# from joblib import Parallel, delayed
 import SStruct
 
 

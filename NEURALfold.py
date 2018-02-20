@@ -36,7 +36,7 @@ def main():
 
     # add subparser for training
     parser_training = subparser.add_parser('train', help='training RNA secondary structures')
-    parser_training.add_argument('train_file', help = 'FASTA file for training', nargs='+',
+    parser_training.add_argument('train_file', help = 'FASTA or BPseq file for training', nargs='+',
                         type=argparse.FileType('r'))
     parser_training.add_argument('-t','--test_file', help = 'FASTA file for test', nargs='+',
                         type=argparse.FileType('r'))
@@ -102,28 +102,28 @@ def main():
 
     # add subparser for test
     parser_test = subparser.add_parser('test', help='test secondary structures')
-    parser_test.add_argument('test_file', help = 'FASTA file for test',
+    parser_test.add_argument('test_file', help = 'FASTA or BPseq file for test',
                         type=argparse.FileType('r'))
-    parser_test.add_argument('-p','--Parameters', help = 'Parameter file',
-                        type=argparse.FileType('r'))
-    parser_test.add_argument('-bp','--bpseq', help = 'use bpseq',
+    # parser_test.add_argument('-p','--Parameters', help = 'Parameter file',
+    #                     type=argparse.FileType('r'))
+    parser_test.add_argument('-bp','--bpseq', help = 'use bpseq format',
                         action = 'store_true')
     parser_test.add_argument('-ip','--ipknot', help = 'predict pseudoknotted secaondary structure',
                         action = 'store_true')
-    parser_test.add_argument('-hn1','--hidden1', help = 'hidden layer nodes for neighbor model',
-                        type=int,default=200)
-    parser_test.add_argument('-hn2','--hidden2', help = 'hidden layer nodes2 for neighbor model',
-                        type=int,default=50)
-    parser_test.add_argument('-hn3','--hidden3', help = 'hidden layer nodes for neighbor model',
-                        type=int)
-    parser_test.add_argument('-n','--neighbor', help = 'length of neighbor bases to see',
-                        type=int,default=40)
+    # parser_test.add_argument('-hn1','--hidden1', help = 'hidden layer nodes for neighbor model',
+    #                     type=int,default=200)
+    # parser_test.add_argument('-hn2','--hidden2', help = 'hidden layer nodes2 for neighbor model',
+    #                     type=int,default=50)
+    # parser_test.add_argument('-hn3','--hidden3', help = 'hidden layer nodes for neighbor model',
+    #                     type=int)
+    # parser_test.add_argument('-n','--neighbor', help = 'length of neighbor bases to see',
+    #                     type=int,default=40)
     parser_test.add_argument('-g','--gamma', help = 'balance between the sensitivity and specificity ',
                         type=int,default=1)
-    parser_test.add_argument('-f','--feature', help = 'feature length',
-                        type=int,default=80)
-    parser_test.add_argument('-a','--activation_function', help = 'activation function for output',
-                        type=str,default="sigmoid")
+    # parser_test.add_argument('-f','--feature', help = 'feature length',
+    #                     type=int,default=80)
+    # parser_test.add_argument('-a','--activation_function', help = 'activation function for output',
+    #                     type=str,default="sigmoid")
 
 
     parser_test.set_defaults(func = test)

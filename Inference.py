@@ -4,9 +4,9 @@ import chainer.links as L
 import chainer.functions as F
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 from joblib import Parallel, delayed
-from multiprocessing import Pool
-import multiprocessing as multi
-from concurrent.futures import ThreadPoolExecutor, as_completed
+# from multiprocessing import Pool
+# import multiprocessing as multi
+# from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
 import math
 import random
@@ -14,7 +14,7 @@ import pulp
 import signal
 from pulp import *
 import cplex
-from inspect import signature
+# from inspect import signature
 
 min_loop_length = Config.min_loop_length
 # self.FEATURE_SIZE = Config.feature_length
@@ -659,7 +659,7 @@ class Inference:
         #     print ("Timed out!")
         #     return np.empty((0,2),dtype=np.int16)
         start_ip = time()
-        print(self.N)
+        # print(self.N)
         # print(signature(CPLEX))
 
         # solver = CPLEX()
@@ -685,12 +685,10 @@ class Inference:
             # elif mode == "Test":
             #     prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
         except KeyError as e:
-            print("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-            print(e)
             pair = np.empty((0,2),dtype=np.int16)
             return pair
 
-        print(' ipknot : '+str(time() - start_ip)+'sec')
+        # print(' ipknot : '+str(time() - start_ip)+'sec')
         # prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
 
         # print(prob.objective.value())
