@@ -10,7 +10,7 @@
 ## Usage
 NEURALfold can take FASTA and BPseq formatted RNA sequences as input, then predicts its secondary structure.
 ```
-%python NEURALfold.py test  -h
+% python NEURALfold.py test  -h
 usage: prediction of RNA secondary structures test [-h] [-bp] [-ip] [-g GAMMA]
                                                    test_file
 
