@@ -4,7 +4,7 @@
   <dd>Python 3</dt>
   <dd>Numpy</dt>
   <dd>Chainer 2.0.0 or later</dt>
-  <dd>CPLEX</dt>
+  <dd>CPLEX(optional)</dt>
 </dl>
 
 ## Usage
