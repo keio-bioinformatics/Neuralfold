@@ -18,7 +18,7 @@ def test(args):
     print("start testing...")
     test = Test.Test(args)
     Sensitivity, PPV, F_value = test.test()
-    print(Sensitivity, PPV, F_value)
+    # print(Sensitivity, PPV, F_value)
 
 def main():
     parser = argparse.ArgumentParser(

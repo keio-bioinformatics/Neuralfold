@@ -47,6 +47,9 @@ class Test:
             predicted_structure=inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
             predicted_structure_set.append(predicted_structure)
 
-        evaluate = Evaluate.Evaluate(predicted_structure_set , self.structure_set)
-        Sensitivity, PPV, F_value = evaluate.getscore()
-        return Sensitivity, PPV, F_value
+        if self.structure_set:
+            evaluate = Evaluate.Evaluate(predicted_structure_set , self.structure_set)
+            Sensitivity, PPV, F_value = evaluate.getscore()
+            return Sensitivity, PPV, F_value
+        else:
+            return 0,0,0
