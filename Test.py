@@ -36,16 +36,23 @@ class Test:
         self.ipknot = args.ipknot
         self.test_file = args.test_file
         self.gamma = args.gamma
-        self.args =args
+        if self.ipknot:
+            self.gamma = (self.gamma, self.gamma)
+        self.args = args
 
     def test(self):
         predicted_structure_set = []
 
         for name,seq in zip(self.name_set, self.seq_set):
             print(name)
-            inference = Inference.Inference(seq,self.feature, self.activation_function,False)
-            predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
-            predicted_structure=inference.ComputePosterior(predicted_BP.data, self.ipknot, self.gamma, "Test")
+
+            inference = Inference.Inference(seq,self.feature, self.activation_function)
+            predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, neighbor=self.neighbor)
+            predicted_structure = inference.ComputePosterior(predicted_BP.data, self.ipknot, self.gamma)
+
+            print(inference.seq)
+            print(inference.dot_parentheis(predicted_structure))
+
             predicted_structure_set.append(predicted_structure)
 
         if self.structure_set:

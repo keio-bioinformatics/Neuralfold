@@ -24,7 +24,8 @@ gpu = Config.gpu
 base_length = Config.base_length
 
 class Inference:
-    def __init__(self, seq, FEATURE_SIZE, activation_function, unpair_weight):
+    def __init__(self, seq, FEATURE_SIZE=80,
+                 activation_function="sigmoid", unpair_weight=False):
         self.seq=seq
         self.N=len(self.seq)
 
@@ -36,10 +37,10 @@ class Inference:
         self.activation_function = activation_function
         self.unpair_weight = unpair_weight
 
-    def pair_check(self,tup):
-        if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
-            return True
-        return False
+    # def pair_check(self,tup):
+    #     if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
+    #         return True
+    #     return False
 
     def base_represent(self,base):
         if gpu == True:
@@ -360,7 +361,7 @@ class Inference:
         # print(' merge : '+str(time() - start_merge)+'sec')
         return BP
 
-    def ComputeNeighbor(self, model, neighbor):
+    def ComputeNeighbor(self, model, neighbor=40):
         # set model
         self.model = model
 
@@ -472,8 +473,9 @@ class Inference:
             all_bases += matrix[tup[0]] * matrix_reverse[tup[1]]
         return all_bases
 
+
     # def buildDP(self, BP, unpair_score):
-    def buildDP(self, BP, gamma):
+    def buildDP(self, BP, gamma=8.0, margin=None):
         DP = np.zeros((self.N,self.N), dtype=np.float32)
         TP = np.empty((self.N,self.N), dtype=np.int)
 
@@ -492,6 +494,8 @@ class Inference:
                 print("enexpected function")
 
             s = canonical_base_matrix[range(0,self.N-n),range(n,self.N)] * (gamma + 1) * p - 1
+            if margin is not None:
+                s += margin[range(0,self.N-n),range(n,self.N)]
 
             case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + s
             case2 = DP[range(1,self.N-n+1),range(n,self.N)]
@@ -539,18 +543,18 @@ class Inference:
     #
     #     return pair
 
-    def traceback(self, DP, BP, TP, i, j, pair):
+    def traceback(self, TP, i, j, pair=[]):
         if i < j:
             if TP[i,j] == 0:
-                pair = np.append(pair, [[i,j]], axis=0)
-                pair = self.traceback(DP, BP, TP, i+1, j-1, pair)
+                pair.append((i,j))
+                pair = self.traceback(TP, i+1, j-1, pair)
             elif TP[i,j] == 1:
-                pair = self.traceback(DP, BP, TP, i+1, j, pair)
+                pair = self.traceback(TP, i+1, j, pair)
             elif TP[i,j] == 2:
-                pair = self.traceback(DP, BP, TP, i, j-1, pair)
+                pair = self.traceback(TP, i, j-1, pair)
             else:
-                pair = self.traceback(DP, BP, TP, i, TP[i,j]-3+i+1, pair)
-                pair = self.traceback(DP, BP, TP, TP[i,j]-3+i+1+1, j, pair)
+                pair = self.traceback(TP, i, TP[i,j]-3+i+1, pair)
+                pair = self.traceback(TP, TP[i,j]-3+i+1+1, j, pair)
         return pair
 
 
@@ -558,67 +562,42 @@ class Inference:
         raise Exception("Timed out!")
 
 
-    def nussinov(self, BP, gamma, mode):
+    def nussinov(self, BP, gamma=8.0, margin=None):
         # DP, TP = self.buildDP(BP, unpair_score)
         # if "Test":
         #     true_structure_matrix=np.zeros((self.N,self.N), dtype=np.float32)
-        DP, TP = self.buildDP(BP, gamma)
+        DP, TP = self.buildDP(BP, gamma=gamma, margin=margin)
         # print(' DP : '+str(time() - start_DP)+'sec')
         #start_traceback = time()
-        pair = self.traceback(DP, BP, TP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
-        y = ['.']*len(self.seq)
-        for p in pair:
-            y[p[0]] = '('
-            y[p[1]] = ')'
-        if mode == "Test":
-            print(self.seq)
-            print("".join(y))
+        pair = self.traceback(TP, 0, self.N-1)
 
         return pair
 
 
-    def ipknot(self, bp, gamma, mode):
+    def ipknot(self, bp, gamma, margin=None):
         prob = pulp.LpProblem("IPknot", pulp.LpMaximize)
         seqlen = self.N
         nlevels = len(gamma)
 
         canonical_base_matrix = self.basepairmatrix()
 
-        # variables
+        # variables and objective function
         x = [[[None for i in range(seqlen)] for j in range(seqlen)] for k in range(nlevels)]
+        obj = []
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
-                    p = bp[self.hash_for_BP(i, j)]
-                    if canonical_base_matrix[i,j] == 1 and (gamma[k]+1) * p - 1 >= 0 :
+                    s = (gamma[k]+1) * bp[self.hash_for_BP(i, j)] - 1
+                    if margin is not None:
+                        s += margin[i,j]
+                    if canonical_base_matrix[i,j] == 1 and s >= 0 :
                         x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
-
-        # objective function
-        o = [((gamma[k]+1) * bp[self.hash_for_BP(i, j)] - 1) * x[k][i][j]
-             for k in range(nlevels) for j in range(seqlen) for i in range(j) if x[k][i][j] is not None]
-        prob += pulp.lpSum(o)
-        # o = 0
-        # for k in range(nlevels):
-        #     for j in range(seqlen):
-        #         for i in range(j):
-        #             if x[k][i][j] is not None:
-        #                 # if float(bp[self.hash_for_BP(i, j)].data) >=1:
-        #                 #     bp[self.hash_for_BP(i, j)].data =1
-        #                 o += (float(bp[self.hash_for_BP(i, j)].data)-th[k]) * x[k][i][j]
-        # prob += o
+                        obj.append(s * x[k][i][j])
+        prob += pulp.lpSum(obj)
 
         # constraints 1
         for i in range(seqlen):
             prob += pulp.lpSum([x[k][i][j] for j in range(seqlen) for k in range(nlevels) if x[k][i][j] is not None]) <= 1
-
-
-        # for i in range(seqlen):
-        #     o = 0
-        #     for j in range(seqlen):
-        #          for k in range(nlevels):
-        #               if x[k][i][j] is not None:
-        #                 o += x[k][i][j]
-        #     prob += o <= 1
 
         # constraints 2
         for k in range(nlevels):
@@ -640,18 +619,9 @@ class Inference:
                             c1 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(i2-1) if x[k1][j1][j1] is not None]
                             c2 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(j2+1, seqlen) if x[k1][i1][j1] is not None]
                             prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
-                            # for i1 in range(i2+1, j2):
-                            #     for j1 in range(i2-1):
-                            #         if x[k1][j1][j1] is not None:
-                            #             o+=x[k1][i1][j1]
-                            # for i1 in range(i2+1, j2):
-                            #     for j1 in range(j2+1, seqlen):
-                            #         if x[k1][i1][j1] is not None:
-                            #             o+=x[k1][i1][j1]
-                            # prob += o >= x[k2][i2][j2]
-
 
         # solve the IP problem
+
         # signal.signal( signal.SIGALRM, self.signal_handler )
         # signal.alarm( 30 ) # 60 seconds alarm
         # try:
@@ -687,36 +657,70 @@ class Inference:
             # elif mode == "Test":
             #     prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
         except KeyError as e:
-            pair = np.empty((0,2),dtype=np.int16)
-            return pair
+            return []
 
         # print(' ipknot : '+str(time() - start_ip)+'sec')
         # prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
 
         # print(prob.objective.value())
-        y = ['.']*seqlen
-        pair = np.empty((0,2),dtype=np.int16)
+        pair = [ [] for _ in range(nlevels) ]
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
                     if x[k][i][j] is not None and x[k][i][j].value() == 1:
-                        pair = np.append(pair, [[i,j]], axis=0)
-                        # print(i,j)
-                        # print(self.seq[i],self.seq[j])
-                        y[i] = ['(', '[', '{', '<'][k]
-                        y[j] = [')', ']', '}', '>'][k]
-        if mode == "Test":
-            print(self.seq)
-            print("".join(y))
+                        pair[k].append((i,j))
+
         return pair
 
 
+    def dot_parentheis(self, pair):
+        if len(pair) == 0:
+            return ''
+
+        elif type(pair[0]) is tuple: # nussinov
+            y = ['.']*len(self.seq)
+            for p in pair:
+                y[p[0]] = '('
+                y[p[1]] = ')'
+            return "".join(y)
+
+        else: # ipknot
+            l = ('(', '[', '{', '<')
+            r = (')', ']', '}', '>')
+            y = ['.']*len(self.seq)
+            for k, kpair in enumerate(pair):
+                for p in kpair:
+                    y[p[0]] = l[k]
+                    y[p[1]] = r[k]
+            return "".join(y)
+
+
+    def calculate_score(self, BP, pair, gamma=8.0):
+        s = np.zeros((1,1), dtype=np.float32)
+        if type(BP) is Variable:
+            s = Variable(s)
+
+        if len(pair) == 0:
+            pass
+
+        elif type(pair[0]) is tuple: # nussinov
+            for p in pair:
+                s += (gamma+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.
+
+        else: # ipknot
+            for k, kpair in enumerate(pair):
+                for p in kpair:
+                    s += (gamma[k]+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.
+
+        return s.reshape(1,)
+
+
     # def ComputePosterior(self, BP, unpair_score, ipknot, gamma, mode):
-    def ComputePosterior(self, BP, ipknot, gamma, mode):
+    def ComputePosterior(self, BP, ipknot, gamma):
         if ipknot:
-            pair = self.ipknot(BP, (gamma, gamma), mode)
+            pair = self.ipknot(BP, gamma)
         else:
-            pair = self.nussinov(BP, gamma, mode)
+            pair = self.nussinov(BP, gamma)
 
         return pair
 

@@ -57,7 +57,8 @@ class Train:
 
         # self.model = Recursive.Recursive_net(args)
         if args.learning_model == "recursive":
-            self.model = Recursive.Recursive_net(args.hidden_insideoutside,args.hidden2_insideoutside,args.feature, args.hidden_marge,args.hidden2_marge, args.activation_function)
+            self.model = Recursive.Recursive_net(args.hidden_insideoutside,args.hidden2_insideoutside,args.feature,
+                                                 args.hidden_marge,args.hidden2_marge, args.activation_function)
         elif args.learning_model == "deepnet":
             self.model = Deepnet.Deepnet(args.hidden1, args.hidden2, args.hidden3, args.activation_function)
         else:
@@ -81,8 +82,9 @@ class Train:
         self.ipknot = args.ipknot
         self.test_file = args.test_file
         self.gamma = args.gamma
-        print(self.gamma)
-        self.args =args
+        if self.ipknot:
+            self.gamma = (self.gamma, self.gamma)
+        self.args = args
 
 
     def hash_for_BP(self, i, j, N):
@@ -248,7 +250,7 @@ class Train:
 
                 # predicted_structure = inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Train")
                 # predicted_structure = inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Train",true_structure_matrix)
-                predicted_structure = inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Train",true_structure_matrix)
+                predicted_structure = inference.ComputePosterior(predicted_BP, self.ipknot, self.gamma)
                 if len(predicted_structure)==0:
                     continue
                 print(' structure : '+str(time() - start_structure)+'sec')
