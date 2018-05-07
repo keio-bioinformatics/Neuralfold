@@ -80,7 +80,7 @@ class Train:
         self.fully_learn = args.fully_learn
         self.ipknot = args.ipknot
         self.test_file = args.test_file
-        self.gamma = 2**(args.gamma)+1
+        self.gamma = args.gamma
         print(self.gamma)
         self.args =args
 
@@ -110,7 +110,7 @@ class Train:
 
         return predicted_BP
 
-    def calcurate_loss(self, predicted_structure, true_structure, predicted_BP_UP, seq, pair_unpair):
+    def calculate_loss(self, predicted_structure, true_structure, predicted_BP_UP, seq, pair_unpair):
         i = 0
         for predicted_pair in predicted_structure:
             j = 0
@@ -234,9 +234,9 @@ class Train:
                 predicted_UP_left = self.Useloss(predicted_UP_left, seq, true_unpair_left)
                 predicted_UP_right = self.Useloss(predicted_UP_right, seq, true_unpair_right)
                 loss = 0
-                loss += self.calcurate_loss(predicted_structure, true_structure, predicted_BP, seq, "pair")
-                loss += self.calcurate_loss(predicted_unpair_left, true_unpair_left, predicted_UP_left, seq, "unpair")
-                loss += self.calcurate_loss(predicted_unpair_right, true_unpair_right, predicted_UP_right, seq , "unpair")
+                loss += self.calculate_loss(predicted_structure, true_structure, predicted_BP, seq, "pair")
+                loss += self.calculate_loss(predicted_unpair_left, true_unpair_left, predicted_UP_left, seq, "unpair")
+                loss += self.calculate_loss(predicted_unpair_right, true_unpair_right, predicted_UP_right, seq , "unpair")
 
 
             else:
@@ -440,7 +440,7 @@ class Train:
                         predicted_structure_set.append(predicted_structure)
                     else:
                         # predicted_structure=inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
-                        predicted_structure=inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
+                        predicted_structure=inference.ComputePosterior(predicted_BP, self.ipknot, self.gamma, "Test")
                         # predicted_structure_set.append(inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot,"Test"))
                         if len(predicted_structure)==0:
                             continue

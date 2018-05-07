@@ -54,9 +54,9 @@ def main():
                         type=int,default=80)
     parser_training.add_argument('-H2','--hidden2_insideoutside', help = 'hidden layer nodes2 for inside outside',
                         type=int)
-    parser_training.add_argument('-h1','--hidden_marge', help = 'hidden layer nodes for marge phase',
+    parser_training.add_argument('-h1','--hidden_merge', help = 'hidden layer nodes for merge phase',
                         type=int,default=80)
-    parser_training.add_argument('-h2','--hidden2_marge', help = 'hidden layer nodes2 for marge phase',
+    parser_training.add_argument('-h2','--hidden2_merge', help = 'hidden layer nodes2 for merge phase',
                         type=int)
     parser_training.add_argument('-f','--feature', help = 'feature length',
                         type=int,default=80)

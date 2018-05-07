@@ -13,7 +13,7 @@ import random
 import pulp
 import signal
 from pulp import *
-import cplex
+# import cplex
 # from inspect import signature
 
 min_loop_length = Config.min_loop_length
@@ -332,7 +332,7 @@ class Inference:
         #     # FM_outside = [[Variable(xp.zeros((1,self.FEATURE_SIZE), dtype=np.float32)) for i in range(self.N)] for j in range(self.N)]
 
 
-        # marge inside outside
+        # merge inside outside
 
         start_merge = time()
         for n in range(1,self.N):
@@ -470,12 +470,10 @@ class Inference:
         # if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
         for tup in [(0, 1), (1, 0), (2, 3), (3, 2),(1,2),(2,1)]:
             all_bases += matrix[tup[0]] * matrix_reverse[tup[1]]
-        # all_bases = all_bases==0
-        all_bases[all_bases == 0] = -1000
         return all_bases
 
     # def buildDP(self, BP, unpair_score):
-    def buildDP(self, BP, unpair_score,true_structure_matrix):
+    def buildDP(self, BP, gamma):
         DP = np.zeros((self.N,self.N), dtype=np.float32)
         TP = np.empty((self.N,self.N), dtype=np.int)
 
@@ -486,41 +484,23 @@ class Inference:
         canonical_base_matrix = self.basepairmatrix()
 
         for n in range(1,self.N):
-            if n >= 3:
-                if self.activation_function == "softmax":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                elif self.activation_function == "sigmoid":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                else:
-                    print("enexpected function")
+            if self.activation_function == "softmax":
+                p = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n)
+            elif self.activation_function == "sigmoid":
+                p = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n)
+            else:
+                print("enexpected function")
 
-                b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
-                c = a*b
-                c[a<0.1] = -1000
-                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + c
-                # case2 = DP[range(1,self.N-n+1),range(n,self.N)] + unpair_score
-                case2 = DP[range(1,self.N-n+1),range(n,self.N)] + true_structure_matrix[range(1,self.N-n+1),range(n,self.N)]
-                # case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + unpair_score
-                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + true_structure_matrix[range(1,self.N-n+1),range(n,self.N)]
-                case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N] + unpair_score
+            s = canonical_base_matrix[range(0,self.N-n),range(n,self.N)] * (gamma + 1) * p - 1
+
+            case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + s
+            case2 = DP[range(1,self.N-n+1),range(n,self.N)]
+            case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
+            if n >= 3:
+                case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N]
                 DP_diagonal = np.vstack((case1, case2, case3, case4)).max(axis=0)
                 TP_diagonal = np.vstack((case1, case2, case3, case4)).argmax(axis=0)
-
-
             else:
-                if self.activation_function == "softmax":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                elif self.activation_function == "sigmoid":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                else:
-                    print("enexpected function")
-
-                b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
-                c = a*b
-                c[a<0.1] = -1000
-                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + c
-                case2 = DP[range(1,self.N-n+1),range(n,self.N)] + unpair_score
-                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + unpair_score
                 DP_diagonal = np.vstack((case1, case2, case3)).max(axis=0)
                 TP_diagonal = np.vstack((case1, case2, case3)).argmax(axis=0)
 
@@ -529,6 +509,7 @@ class Inference:
 
             DP_bifarcation_row[n,0:self.N-n] = DP_diagonal
             DP_bifarcation_column[self.N-n-1,n:self.N] = DP_diagonal
+
         return DP,TP
 
 
@@ -576,10 +557,30 @@ class Inference:
     def signal_handler(signum, frame):
         raise Exception("Timed out!")
 
-    def ipknot(self, bp, th, mode):
+
+    def nussinov(self, BP, gamma, mode):
+        # DP, TP = self.buildDP(BP, unpair_score)
+        # if "Test":
+        #     true_structure_matrix=np.zeros((self.N,self.N), dtype=np.float32)
+        DP, TP = self.buildDP(BP, gamma)
+        # print(' DP : '+str(time() - start_DP)+'sec')
+        #start_traceback = time()
+        pair = self.traceback(DP, BP, TP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
+        y = ['.']*len(self.seq)
+        for p in pair:
+            y[p[0]] = '('
+            y[p[1]] = ')'
+        if mode == "Test":
+            print(self.seq)
+            print("".join(y))
+
+        return pair
+
+
+    def ipknot(self, bp, gamma, mode):
         prob = pulp.LpProblem("IPknot", pulp.LpMaximize)
         seqlen = self.N
-        nlevels = len(th)
+        nlevels = len(gamma)
 
         canonical_base_matrix = self.basepairmatrix()
 
@@ -588,11 +589,12 @@ class Inference:
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
-                    if float(bp[self.hash_for_BP(i, j)].data) >= th[k] and canonical_base_matrix[i,j] == 1:
+                    p = bp[self.hash_for_BP(i, j)]
+                    if canonical_base_matrix[i,j] == 1 and (gamma[k]+1) * p - 1 >= 0 :
                         x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
 
         # objective function
-        o = [(float(bp[self.hash_for_BP(i, j)].data)-th[k]) * x[k][i][j]
+        o = [((gamma[k]+1) * bp[self.hash_for_BP(i, j)] - 1) * x[k][i][j]
              for k in range(nlevels) for j in range(seqlen) for i in range(j) if x[k][i][j] is not None]
         prob += pulp.lpSum(o)
         # o = 0
@@ -672,9 +674,9 @@ class Inference:
         try:
             # prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex",timelimit=1000))
             # prob.solve(CPLEX())
-            prob.solve(CPLEX(timeLimit=1000, msg=False))
+            # prob.solve(CPLEX(timeLimit=1000, msg=False))
             # prob.solve(CPLEX(timeLimit=10000, msg=False))
-            # prob.solve()
+            prob.solve()
             # prob.solve(CPLEX(msg=False))
             # prob.solve(CPLEX_CMD())
 
@@ -708,33 +710,15 @@ class Inference:
             print("".join(y))
         return pair
 
+
     # def ComputePosterior(self, BP, unpair_score, ipknot, gamma, mode):
-    def ComputePosterior(self, BP, unpair_score, ipknot, gamma, mode,true_structure_matrix):
-        start_DP = time()
-        BP = BP * gamma
+    def ComputePosterior(self, BP, ipknot, gamma, mode):
         if ipknot:
-            if mode == "Train":
-                pair = self.ipknot(BP, [0.1, 0.1], mode)
-            elif mode == "Test":
-                pair = self.ipknot(BP, [0.1, 0.1], mode)
+            pair = self.ipknot(BP, (gamma, gamma), mode)
         else:
-            # DP, TP = self.buildDP(BP, unpair_score)
-            # if "Test":
-            #     true_structure_matrix=np.zeros((self.N,self.N), dtype=np.float32)
-            DP, TP = self.buildDP(BP, unpair_score,true_structure_matrix)
-            # print(' DP : '+str(time() - start_DP)+'sec')
-            start_traceback = time()
-            pair = self.traceback(DP, BP, TP, 0, self.N-1, np.empty((0,2),dtype=np.int16) )
-            y = ['.']*len(self.seq)
-            for p in pair:
-                y[p[0]] = '('
-                y[p[1]] = ')'
-            print(self.seq)
-            print("".join(y))
+            pair = self.nussinov(BP, gamma, mode)
 
-            # print(' traceback : '+str(time() - start_traceback)+'sec')
         return pair
-
 
 
     def buildDP_with_unpair(self, BP, UP_left, UP_right):

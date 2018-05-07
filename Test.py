@@ -35,7 +35,7 @@ class Test:
         self.activation_function = "sigmoid"
         self.ipknot = args.ipknot
         self.test_file = args.test_file
-        self.gamma = 2**(args.gamma)+1
+        self.gamma = args.gamma
         self.args =args
 
     def test(self):
@@ -45,7 +45,7 @@ class Test:
             print(name)
             inference = Inference.Inference(seq,self.feature, self.activation_function,False)
             predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
-            predicted_structure=inference.ComputePosterior(predicted_BP, 0, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
+            predicted_structure=inference.ComputePosterior(predicted_BP.data, self.ipknot, self.gamma, "Test")
             predicted_structure_set.append(predicted_structure)
 
         if self.structure_set:
