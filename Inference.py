@@ -474,7 +474,6 @@ class Inference:
         return all_bases
 
 
-    # def buildDP(self, BP, unpair_score):
     def buildDP(self, BP, gamma=8.0, margin=None):
         DP = np.zeros((self.N,self.N), dtype=np.float32)
         TP = np.empty((self.N,self.N), dtype=np.int)
@@ -563,14 +562,8 @@ class Inference:
 
 
     def nussinov(self, BP, gamma=8.0, margin=None):
-        # DP, TP = self.buildDP(BP, unpair_score)
-        # if "Test":
-        #     true_structure_matrix=np.zeros((self.N,self.N), dtype=np.float32)
         DP, TP = self.buildDP(BP, gamma=gamma, margin=margin)
-        # print(' DP : '+str(time() - start_DP)+'sec')
-        #start_traceback = time()
         pair = self.traceback(TP, 0, self.N-1)
-
         return pair
 
 
@@ -695,7 +688,7 @@ class Inference:
             return "".join(y)
 
 
-    def calculate_score(self, BP, pair, gamma=8.0):
+    def calculate_score(self, BP, pair, gamma=8.0, margin=None):
         s = np.zeros((1,1), dtype=np.float32)
         if type(BP) is Variable:
             s = Variable(s)
@@ -703,19 +696,24 @@ class Inference:
         if len(pair) == 0:
             pass
 
+
         elif type(pair[0]) is tuple: # nussinov
             for p in pair:
                 s += (gamma+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.
+                if margin is not None:
+                    s += margin[p[0], p[1]]
+
 
         else: # ipknot
             for k, kpair in enumerate(pair):
                 for p in kpair:
                     s += (gamma[k]+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.
+                    if margin is not None:
+                        s += margin[p[0], p[1]]
 
         return s.reshape(1,)
 
 
-    # def ComputePosterior(self, BP, unpair_score, ipknot, gamma, mode):
     def ComputePosterior(self, BP, ipknot, gamma):
         if ipknot:
             pair = self.ipknot(BP, gamma)
@@ -723,103 +721,3 @@ class Inference:
             pair = self.nussinov(BP, gamma)
 
         return pair
-
-
-    def buildDP_with_unpair(self, BP, UP_left, UP_right):
-        DP = np.zeros((self.N,self.N), dtype=np.float32)
-        TP = np.empty((self.N,self.N), dtype=np.int)
-
-        DP_bifarcation_row = np.zeros((self.N,self.N), dtype=np.float32)
-        DP_bifarcation_column = np.zeros((self.N,self.N), dtype=np.float32)
-
-
-        canonical_base_matrix = self.basepairmatrix()
-
-        for n in range(1,self.N):
-            if n >= 3:
-                if self.activation_function == "softmax":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                    if UP_left:
-                        left = UP_left[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                        right = UP_right[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                    else:
-                        left=0
-                        right=0
-                elif self.activation_function == "sigmoid":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                    if UP_left is not None:
-                        left = UP_left[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                        right = UP_right[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                    else:
-                        left=0
-                        right=0
-                else:
-                    print("enexpected function")
-
-                b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
-                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a*b
-                case2 = DP[range(1,self.N-n+1),range(n,self.N)] + right
-                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + left
-                case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N]
-                DP_diagonal = np.vstack((case1, case2, case3, case4)).max(axis=0)
-                TP_diagonal = np.vstack((case1, case2, case3, case4)).argmax(axis=0)
-
-
-            else:
-                if self.activation_function == "softmax":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                    if UP_left:
-                        left = UP_left[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                        right = UP_right[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n).data
-                    else:
-                        left=0
-                        right=0
-                elif self.activation_function == "sigmoid":
-                    a = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                    if UP_left is not None:
-                        left = UP_left[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                        right = UP_right[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n).data
-                    else:
-                        left=0
-                        right=0
-                else:
-                    print("enexpected function")
-
-                b = canonical_base_matrix[range(0,self.N-n),range(n,self.N)]
-                case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + a*b
-                case2 = DP[range(1,self.N-n+1),range(n,self.N)] + right
-                case3 = DP[range(0,self.N-n),range(n-1,self.N-1)] + left
-                DP_diagonal = np.vstack((case1, case2, case3)).max(axis=0)
-                TP_diagonal = np.vstack((case1, case2, case3)).argmax(axis=0)
-
-            DP[range(0,self.N-n),range(n,self.N)] = DP_diagonal
-            TP[range(0,self.N-n),range(n,self.N)] = TP_diagonal
-
-            DP_bifarcation_row[n,0:self.N-n] = DP_diagonal
-            DP_bifarcation_column[self.N-n-1,n:self.N] = DP_diagonal
-        return DP,TP
-
-    def traceback_with_unpair(self, DP, BP, TP, i, j, pair, unpair_left, unpair_right):
-        if i < j:
-            if TP[i,j] == 0:
-                pair = np.append(pair, [[i,j]], axis=0)
-                pair, unpair_left, unpair_right = self.traceback_with_unpair(DP, BP, TP, i+1, j-1, pair, unpair_left, unpair_right )
-            elif TP[i,j] == 1:
-                unpair_right = np.append(unpair_right, [[i,j]], axis=0)
-                pair, unpair_left, unpair_right = self.traceback_with_unpair(DP, BP, TP, i+1, j, pair, unpair_left, unpair_right)
-            elif TP[i,j] == 2:
-                unpair_left = np.append(unpair_left, [[i,j]], axis=0)
-                pair = self.traceback(DP, BP, TP, i, j-1, pair)
-            else:
-                pair, unpair_left, unpair_right = self.traceback_with_unpair(DP, BP, TP, i, TP[i,j]-3+i+1, pair, unpair_left, unpair_right)
-                pair, unpair_left, unpair_right = self.traceback_with_unpair(DP, BP, TP, TP[i,j]-3+i+1+1, j, pair, unpair_left, unpair_right)
-        return pair, unpair_left, unpair_right
-
-    def ComputePosterior_with_unpair(self, BP, UP_left=None, UP_right=None):
-        start_DP = time()
-        DP, TP = self.buildDP_with_unpair(BP, UP_left, UP_right)
-        # print(' DP : '+str(time() - start_DP)+'sec')
-        start_traceback = time()
-        pair, unpair_left, unpair_right = self.traceback_with_unpair(DP, BP, TP, 0, self.N-1, np.empty((0,2),dtype=np.int16), np.empty((0,2),dtype=np.int16), np.empty((0,2),dtype=np.int16))
-        # print(' traceback : '+str(time() - start_traceback)+'sec')
-        return pair , unpair_left, unpair_right

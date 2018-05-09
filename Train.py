@@ -26,14 +26,6 @@ BATCH = Config.BATCH
 Iterative_Parameter_Mixture = Config.Iterative_Parameter_Mixture
 
 class Train:
-    # def __init__(self, seq_set, structure_set, seq_set_test = None, structure_set_test = None):
-    #     self.seq_set = seq_set
-    #     self.seq_length_set = []
-    #     for x in self.seq_set:
-    #         self.seq_length_set.append(len(x))
-    #     self.structure_set = structure_set
-    #     self.seq_set_test = seq_set_test
-    #     self.structure_set_test = structure_set_test
     def __init__(self, args):
         sstruct = SStruct.SStruct(args.train_file, args.small_structure)
         if args.bpseq:
@@ -91,77 +83,6 @@ class Train:
         n = j-i
         return int(n * (N + N - n +1)/2 + i)
 
-    def Useloss(self,predicted_BP, seq, true_structure):
-        margin = 0.2
-        if self.activation_function == "softmax":
-            predicted_BP[:,:,1].data += margin
-            predicted_BP[:,:,0].data -= margin
-        elif self.activation_function == "sigmoid":
-            predicted_BP.data += margin
-        else:
-            print("enexpected function")
-
-        for true_pair in true_structure:
-            if self.activation_function == "softmax":
-                predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq)),0,1].data -= 2*margin
-                predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq)),0,0].data += 2*margin
-            elif self.activation_function == "sigmoid":
-                predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))].data -= 2*margin
-            else:
-                print("enexpected function")
-
-        return predicted_BP
-
-    def calculate_loss(self, predicted_structure, true_structure, predicted_BP_UP, seq, pair_unpair):
-        i = 0
-        for predicted_pair in predicted_structure:
-            j = 0
-            for true_pair in true_structure:
-                if (predicted_pair == true_pair).all():
-                    np.delete(predicted_structure,i,0)
-                    np.delete(true_structure,j,0)
-                    break
-                j+=1
-            i+=1
-
-        loss = 0
-        if self.activation_function == "softmax":
-            t = Variable(np.array([0], dtype=np.int32))
-            t2 = Variable(np.array([1], dtype=np.int32))
-
-        elif self.activation_function == "sigmoid":
-            t = Variable(np.array([[0]], dtype=np.float32))
-            if pair_unpair == "pair":
-                t2 = Variable(np.array([[1]], dtype=np.float32))
-            else:
-                t2 = Variable(np.array([[1]], dtype=np.float32))
-        else:
-            print("enexpected function")
-        #backprop
-        count = 0
-        for predicted_pair in predicted_structure:
-            count += 1
-            y = predicted_BP_UP[self.hash_for_BP(predicted_pair[0], predicted_pair[1], len(seq))]
-            if self.activation_function == "softmax":
-                loss += F.softmax_cross_entropy(y, t)
-            elif self.activation_function == "sigmoid":
-                loss += F.mean_squared_error(y, t)
-            else:
-                print("enexpected function")
-
-        for true_pair in true_structure:
-            count += 1
-            y = predicted_BP_UP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))]
-            if self.activation_function == "softmax":
-                loss += F.softmax_cross_entropy(y, t2)
-            elif self.activation_function == "sigmoid":
-                loss += F.mean_squared_error(y, t2)
-            else:
-                print("enexpected function")
-
-        return loss
-
-
     def train_engine(self, seq_set, true_structure_set):
         # model = Recursive.Recursive_net()
         start_iter = time()
@@ -178,127 +99,45 @@ class Train:
             # print(true_structure)
             step +=1
             start_BP = time()
-            inference = Inference.Inference(seq,self.feature, self.activation_function,self.unpair_weight)
+            inference = Inference.Inference(seq,self.feature, self.activation_function)
             if self.args.learning_model == "recursive":
                 predicted_BP = inference.ComputeInsideOutside(self.model)
             elif self.args.learning_model == "deepnet":
-                predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
+                predicted_BP, _, _ = inference.ComputeNeighbor(self.model, self.neighbor)
             else:
                 print("unexpected network")
 
-            # predicted_BP = inference.ComputeInsideOutside(self.model)
-
             print(' BP : '+str(time() - start_BP)+'sec')
-            if self.max_margin:
-                predicted_BP = self.Useloss(predicted_BP, seq, true_structure)
 
 
             if self.fully_learn:
                 length = len(seq)
                 num = int((length*length-length)/2+length)
                 true_structure_matrix = Variable(np.zeros((num, 1), dtype=np.float32))
-                loss = 0
-                # if self.activation_function == "softmax":
-                #     t = Variable(np.array([0], dtype=np.int32))
-                #     t2 = Variable(np.array([1], dtype=np.int32))
-                # elif self.activation_function == "sigmoid":
-                #     t = Variable(np.array([[0]], dtype=np.float32))
-                #     t2 = Variable(np.array([[1]], dtype=np.float32))
-                # else:
-                #     print("enexpected function")
-                #
-                # for true_pair in true_structure:
-                #     y = predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))]
-                #     if self.activation_function == "softmax":
-                #         loss += F.softmax_cross_entropy(y, t2)
-                #     elif self.activation_function == "sigmoid":
-                #         loss += F.mean_squared_error(y, t2)
-                #     else:
-                #         print("enexpected function")
-                # loss = loss*10
 
                 for true_pair in true_structure:
-                    true_structure_matrix[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))].data = Variable(np.array([1], dtype=np.float32))
-                loss += F.mean_squared_error(predicted_BP.reshape(num, 1), true_structure_matrix)
-
-            elif self.unpair_weight:
-                # predict structure
-                predicted_structure, predicted_unpair_left, predicted_unpair_right = inference.ComputePosterior_with_unpair(predicted_BP, predicted_UP_left, predicted_UP_right)
-
-                # create true structure BPP
-                length = len(seq)
-                num = int((length*length-length)/2+length)
-                true_structure_matrix = Variable(np.zeros((num, 1), dtype=np.float32))
-                for true_pair in true_structure:
-                    true_structure_matrix[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))].data = Variable(np.array([1], dtype=np.float32))
-
-                ture_structure, true_unpair_left, true_unpair_right = inference.ComputePosterior_with_unpair(true_structure_matrix, None, None)
-                predicted_UP_left = self.Useloss(predicted_UP_left, seq, true_unpair_left)
-                predicted_UP_right = self.Useloss(predicted_UP_right, seq, true_unpair_right)
-                loss = 0
-                loss += self.calculate_loss(predicted_structure, true_structure, predicted_BP, seq, "pair")
-                loss += self.calculate_loss(predicted_unpair_left, true_unpair_left, predicted_UP_left, seq, "unpair")
-                loss += self.calculate_loss(predicted_unpair_right, true_unpair_right, predicted_UP_right, seq , "unpair")
-
+                    true_structure_matrix[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))] = Variable(np.array([1], dtype=np.float32))
+                loss = F.mean_squared_error(predicted_BP.reshape(num, 1), true_structure_matrix)
 
             else:
                 start_structure = time()
                 length = len(seq)
-                true_structure_matrix = np.zeros((length,length), dtype=np.float32)
-                for true_pair in true_structure:
-                    true_structure_matrix[true_pair[0], true_pair[1]] = self.unpair_score
 
-                # predicted_structure = inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Train")
-                # predicted_structure = inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Train",true_structure_matrix)
-                predicted_structure = inference.ComputePosterior(predicted_BP, self.ipknot, self.gamma)
-                if len(predicted_structure)==0:
-                    continue
+                margin = np.zeros((length,length), dtype=np.float32)
+                margin += neg_margin
+                for true_pair in true_structure:
+                    margin[true_pair[0], true_pair[1]] -= pos_margin + neg_margin
+
+                predicted_structure = inference.ComputePosterior(predicted_BP, self.ipknot,
+                                                                 gamma=self.gamma, margin=margin)
+                predicted_score = inference.calculate_score(predicted_BP, predicted_structure,
+                                                            gamma=self.gamma, margin=margin)
+                true_score = inference.calculate_score(predicted_BP, true_structure, gamma=self.gamma)
+
                 print(' structure : '+str(time() - start_structure)+'sec')
 
-                i = 0
-                for predicted_pair in predicted_structure:
-                    j = 0
-                    for true_pair in true_structure:
-                        if (predicted_pair == true_pair).all():
-                            np.delete(predicted_structure,i,0)
-                            np.delete(true_structure,j,0)
-                            break
-                        j+=1
-                    i+=1
-
-                loss = 0
-                if self.activation_function == "softmax":
-                    t = Variable(np.array([0], dtype=np.int32))
-                    t2 = Variable(np.array([1], dtype=np.int32))
-                elif self.activation_function == "sigmoid":
-                    t = Variable(np.array([[0]], dtype=np.float32))
-                    t2 = Variable(np.array([[1]], dtype=np.float32))
-                else:
-                    print("enexpected function")
                 #backprop
-                count = 0
-                for predicted_pair in predicted_structure:
-                    count += 1
-                    y = predicted_BP[self.hash_for_BP(predicted_pair[0], predicted_pair[1], len(seq))]
-                    if self.activation_function == "softmax":
-                        loss += 2 * F.softmax_cross_entropy(y, t)
-                    elif self.activation_function == "sigmoid":
-                        loss += 2 * F.mean_squared_error(y, t)
-                    else:
-                        print("enexpected function")
-
-                for true_pair in true_structure:
-                    count += 1
-                    y = predicted_BP[self.hash_for_BP(true_pair[0], true_pair[1], len(seq))]
-                    if self.activation_function == "softmax":
-                        loss += F.softmax_cross_entropy(y, t2)
-                    elif self.activation_function == "sigmoid":
-                        loss += F.mean_squared_error(y, t2)
-                    else:
-                        print("enexpected function")
-
-                if self.args.count:
-                    loss = count*loss
+                loss = predicted_score - true_score
 
             start_backward = time()
             self.model.zerograds()
@@ -399,9 +238,6 @@ class Train:
                 self.model.L2.W.data = sum(L2_W)/len(list_for_batches)
                 self.model.L2.b.data = sum(L2_b)/len(list_for_batches)
 
-
-
-
             #SGD
             else:
                 # shuffle dataset
@@ -411,8 +247,6 @@ class Train:
                 self.train_engine(seq_set, structure_set)
 
                 # print(str(i)+"/"+str(len(self.seq_set)))
-
-
 
             print('ite'+str(ite)+': it cost '+str(time() - start_iter)+'sec')
             #save model
@@ -433,20 +267,14 @@ class Train:
                         predicted_BP = inference.ComputeInsideOutside(self.model)
                     elif self.args.learning_model == "deepnet":
                         # predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
-                        predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, self.neighbor)
+                        predicted_BP, _, _ = inference.ComputeNeighbor(self.model, self.neighbor)
                     else:
                         print("unexpected network")
 
-                    if self.unpair_weight:
-                        predicted_structure, predicted_unpair_left, predicted_unpair_right = inference.ComputePosterior_with_unpair(predicted_BP, predicted_UP_left, predicted_UP_right)
-                        predicted_structure_set.append(predicted_structure)
-                    else:
-                        # predicted_structure=inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot, self.gamma, "Test",np.zeros((len(seq),len(seq)), dtype=np.float32))
-                        predicted_structure=inference.ComputePosterior(predicted_BP, self.ipknot, self.gamma, "Test")
-                        # predicted_structure_set.append(inference.ComputePosterior(predicted_BP, self.unpair_score, self.ipknot,"Test"))
-                        if len(predicted_structure)==0:
-                            continue
-                        predicted_structure_set.append(predicted_structure)
+                    predicted_structure = inference.ComputePosterior(predicted_BP, self.ipknot, self.gamma)
+                    if len(predicted_structure) == 0:
+                        continue
+                    predicted_structure_set.append(predicted_structure)
 
                     evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
                     Sensitivity, PPV, F_value = evaluate.getscore()
