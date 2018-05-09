@@ -24,8 +24,7 @@ gpu = Config.gpu
 base_length = Config.base_length
 
 class Inference:
-    def __init__(self, seq, FEATURE_SIZE=80,
-                 activation_function="sigmoid", unpair_weight=False):
+    def __init__(self, seq, FEATURE_SIZE=80, activation_function="sigmoid"):
         self.seq=seq
         self.N=len(self.seq)
 
@@ -35,7 +34,6 @@ class Inference:
         self.sequence_vector = Variable(self.sequence_vector)
         self.FEATURE_SIZE = FEATURE_SIZE
         self.activation_function = activation_function
-        self.unpair_weight = unpair_weight
 
     # def pair_check(self,tup):
     #     if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
@@ -361,6 +359,7 @@ class Inference:
         # print(' merge : '+str(time() - start_merge)+'sec')
         return BP
 
+
     def ComputeNeighbor(self, model, neighbor=40):
         # set model
         self.model = model
@@ -373,21 +372,21 @@ class Inference:
         else:
             print("enexpected function")
 
-        # initiate unpair table for left
-        if self.activation_function == "softmax":
-            UP_left = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
-        elif self.activation_function == "sigmoid":
-            UP_left = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
-        else:
-            print("enexpected function")
+        # # initiate unpair table for left
+        # if self.activation_function == "softmax":
+        #     UP_left = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
+        # elif self.activation_function == "sigmoid":
+        #     UP_left = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
+        # else:
+        #     print("enexpected function")
 
-        # initiate unpair table for right
-        if self.activation_function == "softmax":
-            UP_right = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
-        elif self.activation_function == "sigmoid":
-            UP_right = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
-        else:
-            print("enexpected function")
+        # # initiate unpair table for right
+        # if self.activation_function == "softmax":
+        #     UP_right = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
+        # elif self.activation_function == "sigmoid":
+        #     UP_right = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
+        # else:
+        #     print("enexpected function")
 
         # Fill the side with 0 vectors
         sequence_vector_neighbor = self.sequence_vector.reshape(self.N,base_length)
@@ -419,20 +418,20 @@ class Inference:
 
             if self.activation_function == "softmax":
                 BP = F.vstack((BP, self.model(x, "center").reshape(self.N - interval,1,2)))
-                if self.unpair_weight:
-                    UP_left = F.vstack((UP_left, self.model(x, "left").reshape(self.N - interval,1,2)))
-                    UP_right = F.vstack((UP_right, self.model(x, "right").reshape(self.N - interval,1,2)))
+                # if self.unpair_weight:
+                #     UP_left = F.vstack((UP_left, self.model(x, "left").reshape(self.N - interval,1,2)))
+                #     UP_right = F.vstack((UP_right, self.model(x, "right").reshape(self.N - interval,1,2)))
 
             elif self.activation_function == "sigmoid":
                 BP = F.vstack((BP, self.model(x, "center").reshape(self.N - interval,1,1)))
-                if self.unpair_weight:
-                    UP_left = F.vstack((UP_left, self.model(x, "left").reshape(self.N - interval,1,1)))
-                    UP_right = F.vstack((UP_right, self.model(x, "right").reshape(self.N - interval,1,1)))
+                # if self.unpair_weight:
+                #     UP_left = F.vstack((UP_left, self.model(x, "left").reshape(self.N - interval,1,1)))
+                #     UP_right = F.vstack((UP_right, self.model(x, "right").reshape(self.N - interval,1,1)))
 
             else:
                 print("enexpected function")
 
-        return BP, UP_left, UP_right
+        return BP #, UP_left, UP_right
 
     # def buildDP2(self, BP):
     #     DP = np.zeros((self.N,self.N))
@@ -541,6 +540,7 @@ class Inference:
     #             # print(np.absolute(DP[i, j] - DP[i, j-1]))
     #
     #     return pair
+
 
     def traceback(self, TP, i, j, pair=[]):
         if i < j:

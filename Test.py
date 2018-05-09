@@ -47,7 +47,8 @@ class Test:
             print(name)
 
             inference = Inference.Inference(seq,self.feature, self.activation_function)
-            predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, neighbor=self.neighbor)
+            # predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, neighbor=self.neighbor)
+            predicted_BP = inference.ComputeNeighbor(self.model, neighbor=self.neighbor)
             predicted_structure = inference.ComputePosterior(predicted_BP.data, self.ipknot, self.gamma)
 
             print(inference.seq)

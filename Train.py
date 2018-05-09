@@ -67,8 +67,6 @@ class Train:
         self.activation_function = args.activation_function
         self.feature = args.feature
         self.max_margin = args.max_margin
-        self.unpair_score = args.unpair_score
-        self.unpair_weight = args.unpair_weight
         self.neighbor = args.neighbor
         self.fully_learn = args.fully_learn
         self.ipknot = args.ipknot
@@ -90,25 +88,24 @@ class Train:
         # optimizer = optimizers.Adam()
         # optimizer = optimizers.SGD()
         # optimizer.setup(model)
-        step=0
+        step = 0
         for seq, true_structure in zip(seq_set, true_structure_set):
             print("step=",str(step))
             # if (seq=="GGGAAACGGGCAGGCGGCGGCGACCGCCGAAACAACCGC"):
             #     continue
             # print(seq)
             # print(true_structure)
-            step +=1
+            step += 1
             start_BP = time()
             inference = Inference.Inference(seq,self.feature, self.activation_function)
             if self.args.learning_model == "recursive":
                 predicted_BP = inference.ComputeInsideOutside(self.model)
             elif self.args.learning_model == "deepnet":
-                predicted_BP, _, _ = inference.ComputeNeighbor(self.model, self.neighbor)
+                predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
             else:
                 print("unexpected network")
 
             print(' BP : '+str(time() - start_BP)+'sec')
-
 
             if self.fully_learn:
                 length = len(seq)
@@ -133,11 +130,9 @@ class Train:
                 predicted_score = inference.calculate_score(predicted_BP, predicted_structure,
                                                             gamma=self.gamma, margin=margin)
                 true_score = inference.calculate_score(predicted_BP, true_structure, gamma=self.gamma)
-
-                print(' structure : '+str(time() - start_structure)+'sec')
-
-                #backprop
                 loss = predicted_score - true_score
+
+            print(' structure : '+str(time() - start_structure)+'sec')
 
             start_backward = time()
             self.model.zerograds()
@@ -256,18 +251,15 @@ class Train:
             serializers.save_npz('my.state', self.optimizer)
 
             #TEST
-            # if (self.seq_set_test is not None and ite == self.iters_num-1):
-            # if (self.seq_set_test is not None and (ite % 10)==9 ):
             if (self.test_file is not None):
                 predicted_structure_set = []
                 print("start testing...")
                 for seq in self.seq_set_test:
-                    inference = Inference.Inference(seq,self.feature, self.activation_function, self.unpair_weight)
+                    inference = Inference.Inference(seq,self.feature, self.activation_function)
                     if self.args.learning_model == "recursive":
                         predicted_BP = inference.ComputeInsideOutside(self.model)
                     elif self.args.learning_model == "deepnet":
-                        # predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
-                        predicted_BP, _, _ = inference.ComputeNeighbor(self.model, self.neighbor)
+                        predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
                     else:
                         print("unexpected network")
 
@@ -280,7 +272,9 @@ class Train:
                     Sensitivity, PPV, F_value = evaluate.getscore()
 
                     file = open('result.txt', 'a')
-                    result = ['Sensitivity=', str(round(Sensitivity,5)),' ', 'PPV=', str(round(PPV,5)),' ','F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
+                    result = ['Sensitivity=', str(round(Sensitivity,5)),' ',
+                              'PPV=', str(round(PPV,5)),' ',
+                              'F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
                     file.writelines(result)
                     file.close()
                 print(Sensitivity, PPV, F_value)
