@@ -542,7 +542,7 @@ class Inference:
     #     return pair
 
 
-    def traceback(self, TP, i, j, pair=[]):
+    def traceback(self, TP, i, j, pair):
         if i < j:
             if TP[i,j] == 0:
                 pair.append((i,j))
@@ -561,9 +561,9 @@ class Inference:
         raise Exception("Timed out!")
 
 
-    def nussinov(self, BP, gamma=8.0, margin=None):
+    def nussinov(self, BP, gamma, margin=None):
         DP, TP = self.buildDP(BP, gamma=gamma, margin=margin)
-        pair = self.traceback(TP, 0, self.N-1)
+        pair = self.traceback(TP, 0, self.N-1, [])
         return pair
 
 
@@ -670,7 +670,7 @@ class Inference:
         if len(pair) == 0:
             return ''
 
-        elif type(pair[0]) is tuple: # nussinov
+        elif len(pair[0]) > 0 and type(pair[0][0]) is int: # nussinov
             y = ['.']*len(self.seq)
             for p in pair:
                 y[p[0]] = '('
@@ -688,7 +688,7 @@ class Inference:
             return "".join(y)
 
 
-    def calculate_score(self, BP, pair, gamma=8.0, margin=None):
+    def calculate_score(self, BP, pair, gamma, margin=None):
         s = np.zeros((1,1), dtype=np.float32)
         if type(BP) is Variable:
             s = Variable(s)
@@ -696,13 +696,11 @@ class Inference:
         if len(pair) == 0:
             pass
 
-
-        elif type(pair[0]) is tuple: # nussinov
+        elif len(pair[0]) > 0 and type(pair[0][0]) is int: # nussinov
             for p in pair:
                 s += (gamma+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.
                 if margin is not None:
                     s += margin[p[0], p[1]]
-
 
         else: # ipknot
             for k, kpair in enumerate(pair):
@@ -714,10 +712,10 @@ class Inference:
         return s.reshape(1,)
 
 
-    def ComputePosterior(self, BP, ipknot, gamma):
+    def ComputePosterior(self, BP, ipknot, gamma, margin=None):
         if ipknot:
-            pair = self.ipknot(BP, gamma)
+            pair = self.ipknot(BP, gamma, margin)
         else:
-            pair = self.nussinov(BP, gamma)
+            pair = self.nussinov(BP, gamma, margin)
 
         return pair

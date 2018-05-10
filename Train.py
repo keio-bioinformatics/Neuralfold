@@ -66,7 +66,8 @@ class Train:
 
         self.activation_function = args.activation_function
         self.feature = args.feature
-        self.max_margin = args.max_margin
+        self.pos_margin = args.margin
+        self.neg_margin = args.margin
         self.neighbor = args.neighbor
         self.fully_learn = args.fully_learn
         self.ipknot = args.ipknot
@@ -81,7 +82,7 @@ class Train:
         n = j-i
         return int(n * (N + N - n +1)/2 + i)
 
-    def train_engine(self, seq_set, true_structure_set):
+    def train_engine(self, name_set, seq_set, true_structure_set):
         # model = Recursive.Recursive_net()
         start_iter = time()
         # model = self.model
@@ -89,15 +90,13 @@ class Train:
         # optimizer = optimizers.SGD()
         # optimizer.setup(model)
         step = 0
-        for seq, true_structure in zip(seq_set, true_structure_set):
-            print("step=",str(step))
-            # if (seq=="GGGAAACGGGCAGGCGGCGGCGACCGCCGAAACAACCGC"):
-            #     continue
+        for name, seq, true_structure in zip(name_set, seq_set, true_structure_set):
+            print(name, len(seq), 'bp')
             # print(seq)
             # print(true_structure)
             step += 1
             start_BP = time()
-            inference = Inference.Inference(seq,self.feature, self.activation_function)
+            inference = Inference.Inference(seq, self.feature, self.activation_function)
             if self.args.learning_model == "recursive":
                 predicted_BP = inference.ComputeInsideOutside(self.model)
             elif self.args.learning_model == "deepnet":
@@ -121,11 +120,11 @@ class Train:
                 length = len(seq)
 
                 margin = np.zeros((length,length), dtype=np.float32)
-                margin += neg_margin
+                margin += self.neg_margin
                 for true_pair in true_structure:
-                    margin[true_pair[0], true_pair[1]] -= pos_margin + neg_margin
+                    margin[true_pair[0], true_pair[1]] -= self.pos_margin + self.neg_margin
 
-                predicted_structure = inference.ComputePosterior(predicted_BP, self.ipknot,
+                predicted_structure = inference.ComputePosterior(predicted_BP.data, self.ipknot,
                                                                  gamma=self.gamma, margin=margin)
                 predicted_score = inference.calculate_score(predicted_BP, predicted_structure,
                                                             gamma=self.gamma, margin=margin)
@@ -137,17 +136,17 @@ class Train:
             start_backward = time()
             self.model.zerograds()
             loss.backward()
-            # print(' backward : '+str(time() - start_backward)+'sec')
+            print(' backward : '+str(time() - start_backward)+'sec')
             start_update = time()
             self.optimizer.update()
-            # print(' update : '+str(time() - start_update)+'sec')
+            print(' update : '+str(time() - start_update)+'sec')
 
         return self.model
 
 
-    def wrapper_train(self,batch):
-        seq_set, structure_set = zip(*batch)
-        return self.train_engine(seq_set, structure_set)
+    def wrapper_train(self, batch):
+        name_set, seq_set, structure_set = zip(*batch)
+        return self.train_engine(name_set, seq_set, structure_set)
 
     def train(self):
         #define model
@@ -155,16 +154,13 @@ class Train:
         # self.optimizer = optimizers.Adam()
         # self.optimizer.setup(self.model)
 
-        list_for_shuffle = list(zip(self.seq_set, self.structure_set))
-        random.shuffle(list_for_shuffle)
-
         for ite in range(self.iters_num):
             print('ite = ' +  str(ite))
             start_iter = time()
 
             if BATCH:
                 #sort dataset
-                list_for_sort = list(zip(self.seq_length_set, self.seq_set, self.structure_set))
+                list_for_sort = list(zip(self.seq_length_set, self.name_set, self.seq_set, self.structure_set))
                 list_for_sort.sort(key=itemgetter(0))
                 # list_for_batches = [list_for_sort[i:i+batch_num] for i in range(0,len(list_for_sort),batch_num)]
                 i=0
@@ -180,10 +176,10 @@ class Train:
                 start = time()
                 for batch in list_for_batches:
                     start_batch =time()
-                    seq_length_set, seq_set, structure_set = zip(*batch)
+                    seq_length_set, seq_name, seq_set, structure_set = zip(*batch)
                     p= Pool(len(batch))
                     # p= Pool(multi.cpu_count())
-                    result = p.map(self.wrapper_train, batch)
+                    result = p.map(self.wrapper_train, zip(seq_name, seq_set, structure_set))
                     p.close()
                     loss = sum(result)
                     # for seq, true_structure in zip(seq_set, structure_set):
@@ -194,8 +190,8 @@ class Train:
 
             elif Iterative_Parameter_Mixture:
                 # shuffle dataset
-                # list_for_shuffle = list(zip(self.seq_set, self.structure_set))
-                # random.shuffle(list_for_shuffle)
+                list_for_shuffle = list(zip(self.name_set, self.seq_set, self.structure_set))
+                random.shuffle(list_for_shuffle)
                 batch_contents = math.ceil(len(list_for_shuffle)/batch_num)
                 list_for_batches = [list_for_shuffle[i:i+batch_contents] for i in range(0,len(list_for_shuffle),batch_contents)]
 
@@ -235,11 +231,10 @@ class Train:
 
             #SGD
             else:
-                # shuffle dataset
-                list_for_shuffle = list(zip(self.seq_set, self.structure_set))
+                list_for_shuffle = list(zip(self.name_set, self.seq_set, self.structure_set))
                 random.shuffle(list_for_shuffle)
-                seq_set, structure_set = zip(*list_for_shuffle)
-                self.train_engine(seq_set, structure_set)
+                name_set, seq_set, structure_set = zip(*list_for_shuffle)
+                self.train_engine(name_set, seq_set, structure_set)
 
                 # print(str(i)+"/"+str(len(self.seq_set)))
 
