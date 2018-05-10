@@ -23,16 +23,14 @@ class Test:
         else:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
 
-        self.model = Deepnet.Deepnet(200, 50, False, "sigmoid")
+        self.model = Deepnet.Deepnet(40, 200, 50)
 
         # if args.Parameters:
         #     serializers.load_npz(args.Parameters.name, self.model)
         # else:
         serializers.load_npz("NEURALfold_params.data", self.model)
 
-        self.neighbor = 40
         self.feature = 80
-        self.activation_function = "sigmoid"
         self.ipknot = args.ipknot
         self.test_file = args.test_file
         self.gamma = args.gamma
@@ -46,9 +44,8 @@ class Test:
         for name,seq in zip(self.name_set, self.seq_set):
             print(name)
 
-            inference = Inference.Inference(seq,self.feature, self.activation_function)
-            # predicted_BP, predicted_UP_left, predicted_UP_right = inference.ComputeNeighbor(self.model, neighbor=self.neighbor)
-            predicted_BP = inference.ComputeNeighbor(self.model, neighbor=self.neighbor)
+            inference = Inference.Inference(seq, self.feature)
+            predicted_BP = inference.ComputeNeighbor(self.model)
             predicted_structure = inference.ComputePosterior(predicted_BP.data, self.ipknot, self.gamma)
 
             print(inference.seq)

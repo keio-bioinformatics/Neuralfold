@@ -3,18 +3,11 @@ import Config
 import chainer.links as L
 import chainer.functions as F
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
-from joblib import Parallel, delayed
-# from multiprocessing import Pool
-# import multiprocessing as multi
-# from concurrent.futures import ThreadPoolExecutor, as_completed
 from time import time
 import math
 import random
 import pulp
 import signal
-from pulp import *
-# import cplex
-# from inspect import signature
 
 min_loop_length = Config.min_loop_length
 # self.FEATURE_SIZE = Config.feature_length
@@ -24,7 +17,7 @@ gpu = Config.gpu
 base_length = Config.base_length
 
 class Inference:
-    def __init__(self, seq, FEATURE_SIZE=80, activation_function="sigmoid"):
+    def __init__(self, seq, FEATURE_SIZE=80):
         self.seq=seq
         self.N=len(self.seq)
 
@@ -33,7 +26,6 @@ class Inference:
             self.sequence_vector = np.vstack((self.sequence_vector, self.base_represent(base)))
         self.sequence_vector = Variable(self.sequence_vector)
         self.FEATURE_SIZE = FEATURE_SIZE
-        self.activation_function = activation_function
 
     # def pair_check(self,tup):
     #     if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
@@ -304,12 +296,7 @@ class Inference:
 
     def ComputeInsideOutside(self, model):
         self.model = model
-        if self.activation_function == "softmax":
-            BP = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
-        elif self.activation_function == "sigmoid":
-            BP = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
-        else:
-            print("enexpected function")
+        BP = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
         Variable(np.zeros((1, 1,self.FEATURE_SIZE), dtype=np.float32)),
         FM_inside = self.Compute_Inside()
         FM_outside = self.Compute_Outside()
@@ -349,44 +336,19 @@ class Inference:
             else:
                 x = F.hstack((FM_inside[self.hash_for_inside(0, n) : self.hash_for_inside(0, n+1)], FM_outside[self.hash_for_outside(0, n) : self.hash_for_outside(0, n+1) : -1])).reshape(self.N-n, -1)
             # BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
-            if self.activation_function == "softmax":
-                BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,2)))
-            elif self.activation_function == "sigmoid":
-                BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
-            else:
-                print("enexpected function")
+            BP = F.vstack((BP, self.model(x, inner  = False).reshape(self.N-n,1,1)))
 
         # print(' merge : '+str(time() - start_merge)+'sec')
         return BP
 
 
-    def ComputeNeighbor(self, model, neighbor=40):
+    def ComputeNeighbor(self, model):
         # set model
         self.model = model
+        neighbor = model.neighbor
 
         # initiate BPP table
-        if self.activation_function == "softmax":
-            BP = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
-        elif self.activation_function == "sigmoid":
-            BP = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
-        else:
-            print("enexpected function")
-
-        # # initiate unpair table for left
-        # if self.activation_function == "softmax":
-        #     UP_left = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
-        # elif self.activation_function == "sigmoid":
-        #     UP_left = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
-        # else:
-        #     print("enexpected function")
-
-        # # initiate unpair table for right
-        # if self.activation_function == "softmax":
-        #     UP_right = Variable(np.zeros((self.N, 1,2), dtype=np.float32))
-        # elif self.activation_function == "sigmoid":
-        #     UP_right = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
-        # else:
-        #     print("enexpected function")
+        BP = Variable(np.zeros((self.N, 1,1), dtype=np.float32))
 
         # Fill the side with 0 vectors
         sequence_vector_neighbor = self.sequence_vector.reshape(self.N,base_length)
@@ -415,23 +377,9 @@ class Inference:
                 surplus = surplus.reshape(row, column)
                 x[0:row,side_input_size-int(column/2)+1:side_input_size+int(column/2)+1].data = surplus.data
 
+            BP = F.vstack((BP, self.model(x).reshape(self.N - interval,1,1)))
 
-            if self.activation_function == "softmax":
-                BP = F.vstack((BP, self.model(x, "center").reshape(self.N - interval,1,2)))
-                # if self.unpair_weight:
-                #     UP_left = F.vstack((UP_left, self.model(x, "left").reshape(self.N - interval,1,2)))
-                #     UP_right = F.vstack((UP_right, self.model(x, "right").reshape(self.N - interval,1,2)))
-
-            elif self.activation_function == "sigmoid":
-                BP = F.vstack((BP, self.model(x, "center").reshape(self.N - interval,1,1)))
-                # if self.unpair_weight:
-                #     UP_left = F.vstack((UP_left, self.model(x, "left").reshape(self.N - interval,1,1)))
-                #     UP_right = F.vstack((UP_right, self.model(x, "right").reshape(self.N - interval,1,1)))
-
-            else:
-                print("enexpected function")
-
-        return BP #, UP_left, UP_right
+        return BP
 
     # def buildDP2(self, BP):
     #     DP = np.zeros((self.N,self.N))
@@ -484,12 +432,7 @@ class Inference:
         canonical_base_matrix = self.basepairmatrix()
 
         for n in range(1,self.N):
-            if self.activation_function == "softmax":
-                p = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1),0,1].reshape(self.N-n)
-            elif self.activation_function == "sigmoid":
-                p = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n)
-            else:
-                print("enexpected function")
+            p = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n)
 
             s = canonical_base_matrix[range(0,self.N-n),range(n,self.N)] * (gamma + 1) * p - 1
             if margin is not None:

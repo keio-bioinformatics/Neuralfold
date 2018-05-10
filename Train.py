@@ -5,18 +5,14 @@ import Deepnet
 import chainer.links as L
 import chainer.functions as F
 import Inference
-# from tqdm import tqdm
 from time import time
 import Test
 import Evaluate
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 import random
 import os
-from multiprocessing import Pool
-import multiprocessing as multi
 from operator import itemgetter
 import math
-# from joblib import Parallel, delayed
 import SStruct
 
 
@@ -47,12 +43,11 @@ class Train:
         # for x in self.seq_set:
         #     self.seq_length_set.append(len(x))
 
-        # self.model = Recursive.Recursive_net(args)
         if args.learning_model == "recursive":
-            self.model = Recursive.Recursive_net(args.hidden_insideoutside,args.hidden2_insideoutside,args.feature,
-                                                 args.hidden_marge,args.hidden2_marge, args.activation_function)
+            self.model = Recursive.Recursive_net(args.hidden_insideoutside, args.hidden2_insideoutside, args.feature,
+                                                 args.hidden_merge, args.hidden2_merge)
         elif args.learning_model == "deepnet":
-            self.model = Deepnet.Deepnet(args.hidden1, args.hidden2, args.hidden3, args.activation_function)
+            self.model = Deepnet.Deepnet(args.neighbor, args.hidden1, args.hidden2)
         else:
             print("unexpected network")
 
@@ -64,11 +59,9 @@ class Train:
         if args.Optimizers:
             serializers.load_npz(args.Optimizers.name, self.optimizer)
 
-        self.activation_function = args.activation_function
         self.feature = args.feature
         self.pos_margin = args.margin
         self.neg_margin = args.margin
-        self.neighbor = args.neighbor
         self.fully_learn = args.fully_learn
         self.ipknot = args.ipknot
         self.test_file = args.test_file
@@ -96,11 +89,11 @@ class Train:
             # print(true_structure)
             step += 1
             start_BP = time()
-            inference = Inference.Inference(seq, self.feature, self.activation_function)
+            inference = Inference.Inference(seq, self.feature)
             if self.args.learning_model == "recursive":
                 predicted_BP = inference.ComputeInsideOutside(self.model)
             elif self.args.learning_model == "deepnet":
-                predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
+                predicted_BP = inference.ComputeNeighbor(self.model)
             else:
                 print("unexpected network")
 
@@ -158,85 +151,12 @@ class Train:
             print('ite = ' +  str(ite))
             start_iter = time()
 
-            if BATCH:
-                #sort dataset
-                list_for_sort = list(zip(self.seq_length_set, self.name_set, self.seq_set, self.structure_set))
-                list_for_sort.sort(key=itemgetter(0))
-                # list_for_batches = [list_for_sort[i:i+batch_num] for i in range(0,len(list_for_sort),batch_num)]
-                i=0
-                list_for_batches = []
-                while i < len(list_for_sort):
-                    a = math.ceil((list_for_sort[i][0]/60)*(list_for_sort[i][0]/60))
-                    batch_num_sort =  a if a < maximum_slots else maximum_slots
-                    list_for_batches.append(list_for_sort[i:i+batch_num_sort])
-                    i = i + batch_num_sort
+            list_for_shuffle = list(zip(self.name_set, self.seq_set, self.structure_set))
+            random.shuffle(list_for_shuffle)
+            name_set, seq_set, structure_set = zip(*list_for_shuffle)
+            self.train_engine(name_set, seq_set, structure_set)
 
-                random.shuffle(list_for_batches)
-                # for seq, true_structure in zip(tqdm(seq_set), structure_set):
-                start = time()
-                for batch in list_for_batches:
-                    start_batch =time()
-                    seq_length_set, seq_name, seq_set, structure_set = zip(*batch)
-                    p= Pool(len(batch))
-                    # p= Pool(multi.cpu_count())
-                    result = p.map(self.wrapper_train, zip(seq_name, seq_set, structure_set))
-                    p.close()
-                    loss = sum(result)
-                    # for seq, true_structure in zip(seq_set, structure_set):
-
-                    model.zerograds()
-                    loss.backward()
-                    optimizer.update()
-
-            elif Iterative_Parameter_Mixture:
-                # shuffle dataset
-                list_for_shuffle = list(zip(self.name_set, self.seq_set, self.structure_set))
-                random.shuffle(list_for_shuffle)
-                batch_contents = math.ceil(len(list_for_shuffle)/batch_num)
-                list_for_batches = [list_for_shuffle[i:i+batch_contents] for i in range(0,len(list_for_shuffle),batch_contents)]
-
-                p= Pool(len(list_for_batches))
-                model_set = p.map(self.wrapper_train, list_for_batches)
-                p.close()
-
-                # model_set = Parallel(n_jobs=-1)([delayed(self.wrapper_train)(batch) for batch in list_for_batches])
-
-                l1_W = []
-                l1_b = []
-                l2_W = []
-                l2_b = []
-                L1_W = []
-                L1_b = []
-                L2_W = []
-                L2_b = []
-
-                for i in range(len(list_for_batches)):
-                    l1_W.append(model_set[i].l1.W.data)
-                    l1_b.append(model_set[i].l1.b.data)
-                    l2_W.append(model_set[i].l2.W.data)
-                    l2_b.append(model_set[i].l2.b.data)
-                    L1_W.append(model_set[i].L1.W.data)
-                    L1_b.append(model_set[i].L1.b.data)
-                    L2_W.append(model_set[i].L2.W.data)
-                    L2_b.append(model_set[i].L2.b.data)
-
-                self.model.l1.W.data = sum(l1_W)/len(list_for_batches)
-                self.model.l1.b.data = sum(l1_b)/len(list_for_batches)
-                self.model.l2.W.data = sum(l2_W)/len(list_for_batches)
-                self.model.l2.b.data = sum(l2_b)/len(list_for_batches)
-                self.model.L1.W.data = sum(L1_W)/len(list_for_batches)
-                self.model.L1.b.data = sum(L1_b)/len(list_for_batches)
-                self.model.L2.W.data = sum(L2_W)/len(list_for_batches)
-                self.model.L2.b.data = sum(L2_b)/len(list_for_batches)
-
-            #SGD
-            else:
-                list_for_shuffle = list(zip(self.name_set, self.seq_set, self.structure_set))
-                random.shuffle(list_for_shuffle)
-                name_set, seq_set, structure_set = zip(*list_for_shuffle)
-                self.train_engine(name_set, seq_set, structure_set)
-
-                # print(str(i)+"/"+str(len(self.seq_set)))
+            # print(str(i)+"/"+str(len(self.seq_set)))
 
             print('ite'+str(ite)+': it cost '+str(time() - start_iter)+'sec')
             #save model
@@ -250,11 +170,11 @@ class Train:
                 predicted_structure_set = []
                 print("start testing...")
                 for seq in self.seq_set_test:
-                    inference = Inference.Inference(seq,self.feature, self.activation_function)
+                    pinference = Inference.Inference(seq,self.feature)
                     if self.args.learning_model == "recursive":
                         predicted_BP = inference.ComputeInsideOutside(self.model)
                     elif self.args.learning_model == "deepnet":
-                        predicted_BP = inference.ComputeNeighbor(self.model, self.neighbor)
+                        predicted_BP = inference.ComputeNeighbor(self.model)
                     else:
                         print("unexpected network")
 

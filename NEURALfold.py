@@ -60,8 +60,6 @@ def main():
                                  type=int)
     parser_training.add_argument('-f','--feature', help = 'feature length',
                                  type=int, default=80)
-    parser_training.add_argument('-a','--activation_function', help = 'activation function for output',
-                                 type=str, default="sigmoid")
     parser_training.add_argument('-l','--learning_model', help = 'learning_model',
                                  type=str, default="deepnet")
 

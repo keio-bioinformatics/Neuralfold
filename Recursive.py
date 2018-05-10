@@ -19,7 +19,7 @@ class Recursive_net(Chain):
     #     self.hidden2_marge = args.hidden2_marge
     #     self.activation_function = args.activation_function
 
-    def __init__(self,hidden_insideoutside,hidden2_insideoutside,feature, hidden_marge,hidden2_marge, activation_function):
+    def __init__(self,hidden_insideoutside,hidden2_insideoutside,feature, hidden_marge,hidden2_marge):
         # define model
         self.hidden_insideoutside = hidden_insideoutside
         self.hidden2_insideoutside = hidden2_insideoutside
@@ -28,8 +28,6 @@ class Recursive_net(Chain):
 
         self.hidden_marge = hidden_marge
         self.hidden2_marge = hidden2_marge
-        self.activation_function = activation_function
-
 
         super(Recursive_net, self).__init__(
             l1 = L.Linear(None, self.hidden_insideoutside),
@@ -55,18 +53,8 @@ class Recursive_net(Chain):
             h = F.leaky_relu(self.L1(x))
             if self.hidden2_marge:
                 h = F.leaky_relu(self.L2(h))
-                if self.activation_function == "softmax":
-                    h = F.softmax(self.L3_2(h))
-                elif self.activation_function == "sigmoid":
-                    h = F.sigmoid(self.L3_1(h))
-                else:
-                    print("enexpected function")
+                h = F.sigmoid(self.L3_1(h))
 
             else:
-                if self.activation_function == "softmax":
-                    h = F.softmax(self.L3_2(h))
-                elif self.activation_function == "sigmoid":
-                    h = F.sigmoid(self.L3_1(h))
-                else:
-                    print("enexpected function")
+                h = F.sigmoid(self.L3_1(h))
         return h
