@@ -515,10 +515,10 @@ class Inference:
         seqlen = self.N
         nlevels = len(gamma)
 
-        if max(gamma)+1 >= seqlen:
+        if max(gamma)+1 >= seqlen or max(gamma) <= 0:
             enabled_bp = np.zeros((seqlen, seqlen)) + 2
 
-        else:
+        else: # acceleration by 'at most gamma+1' candidates for each base
             # reshape BP matrix
             bp_reshaped = np.zeros((seqlen, seqlen))
             j = 0
