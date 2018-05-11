@@ -83,9 +83,12 @@ def main():
     # training option
     parser_training.add_argument('-g','--gamma',
                                  help = 'balance between the sensitivity and specificity ',
-                                 type=int, default=1)
-    parser_training.add_argument('-m','--margin',
-                                 help = 'margin',
+                                 type=float, action='append')
+    parser_training.add_argument('-m','--positive-margin',
+                                 help = 'margin for positives',
+                                 type=float, default=0.2)
+    parser_training.add_argument('--negative-margin',
+                                 help = 'margin for negatives',
                                  type=float, default=0.2)
     parser_training.add_argument('-fu','--fully_learn',
                                  help = 'calculate loss for all canonical pair',
@@ -112,7 +115,7 @@ def main():
                              action = 'store_true')
     parser_test.add_argument('-g','--gamma',
                              help = 'balance between the sensitivity and specificity ',
-                             type=int, default=1)
+                             type=float, action='append')
 
     parser_test.set_defaults(func = test)
 

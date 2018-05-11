@@ -515,23 +515,26 @@ class Inference:
         seqlen = self.N
         nlevels = len(gamma)
 
-        # reshape BP matrix
-        a = np.zeros((seqlen, seqlen))
-        j = 0
-        for i in range(seqlen, 0, -1):
-            a += np.diag(bp[j:j+i].reshape((i)), k=seqlen-i)
-            if seqlen-i>0:
-                a += np.diag(bp[j:j+i].reshape((i)), k=-(seqlen-i))
-            j += i
-        bp = a
+        if max(gamma)+1 >= seqlen:
+            enabled_bp = np.zeros((seqlen, seqlen)) + 2
 
-        # calculate ranks
-        sorted_bp = np.argsort(bp)[:, ::-1]
-        enabled_bp = np.zeros((seqlen, seqlen))
-        for i in range(seqlen):
-            for j in range(int(max(gamma)+1)):
-                enabled_bp[i, sorted_bp[i, j]] = 1
-        enabled_bp += np.transpose(enabled_bp)
+        else:
+            # reshape BP matrix
+            bp_reshaped = np.zeros((seqlen, seqlen))
+            j = 0
+            for i in range(seqlen, 0, -1):
+                bp_reshaped += np.diag(bp[j:j+i].reshape((i)), k=seqlen-i)
+                if seqlen-i>0:
+                    bp_reshaped += np.diag(bp[j:j+i].reshape((i)), k=-(seqlen-i))
+                j += i
+
+            # calculate ranks
+            sorted_bp_idx = np.argsort(bp_reshaped)[:, ::-1]
+            enabled_bp = np.zeros((seqlen, seqlen))
+            for i in range(seqlen):
+                for j in range(int(max(gamma)+1)): # approximate threshold cut
+                    enabled_bp[i, sorted_bp_idx[i, j]] = 1
+            enabled_bp += np.transpose(enabled_bp)
 
         canonical_base_matrix = self.basepairmatrix()
 
@@ -541,7 +544,7 @@ class Inference:
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
-                    s = (gamma[k]+1) * bp[i, j] - 1
+                    s = (gamma[k]+1) * bp[self.hash_for_BP(i, j)] - 1
                     if margin is not None:
                         s += margin[i,j]
                     if canonical_base_matrix[i,j] == 1 and enabled_bp[i, j] >= 2:

@@ -24,9 +24,13 @@ class Test:
         self.feature = 80
         self.ipknot = args.ipknot
         self.test_file = args.test_file
-        self.gamma = args.gamma
         if self.ipknot:
-            self.gamma = (self.gamma, self.gamma)
+            self.gamma = args.gamma
+        else:
+            if args.gamma:
+                self.gamma = args.gamma[0]
+            else:
+                self.gamma = 1.0
         self.args = args
 
 

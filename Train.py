@@ -61,14 +61,18 @@ class Train:
             serializers.load_npz(args.init_optimizers, self.optimizer)
 
         self.feature = args.feature
-        self.pos_margin = args.margin
-        self.neg_margin = args.margin
+        self.pos_margin = args.positive_margin
+        self.neg_margin = args.negative_margin
         self.fully_learn = args.fully_learn
         self.ipknot = args.ipknot
         self.test_file = args.test_file
-        self.gamma = args.gamma
         if self.ipknot:
-            self.gamma = (self.gamma, self.gamma)
+            self.gamma = args.gamma
+        else:
+            if args.gamma:
+                self.gamma = args.gamma[0]
+            else:
+                self.gamma = 1.0
         self.args = args
 
 
