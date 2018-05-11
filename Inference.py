@@ -421,7 +421,7 @@ class Inference:
         return all_bases
 
 
-    def buildDP(self, BP, gamma=8.0, margin=None):
+    def buildDP(self, BP, gamma, margin=None):
         DP = np.zeros((self.N,self.N), dtype=np.float32)
         TP = np.empty((self.N,self.N), dtype=np.int)
 
@@ -515,6 +515,24 @@ class Inference:
         seqlen = self.N
         nlevels = len(gamma)
 
+        # reshape BP matrix
+        a = np.zeros((seqlen, seqlen))
+        j = 0
+        for i in range(seqlen, 0, -1):
+            a += np.diag(bp[j:j+i].reshape((i)), k=seqlen-i)
+            if seqlen-i>0:
+                a += np.diag(bp[j:j+i].reshape((i)), k=-(seqlen-i))
+            j += i
+        bp = a
+
+        # calculate ranks
+        sorted_bp = np.argsort(bp)[:, ::-1]
+        enabled_bp = np.zeros((seqlen, seqlen))
+        for i in range(seqlen):
+            for j in range(int(max(gamma)+1)):
+                enabled_bp[i, sorted_bp[i, j]] = 1
+        enabled_bp += np.transpose(enabled_bp)
+
         canonical_base_matrix = self.basepairmatrix()
 
         # variables and objective function
@@ -523,10 +541,10 @@ class Inference:
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
-                    s = (gamma[k]+1) * bp[self.hash_for_BP(i, j)] - 1
+                    s = (gamma[k]+1) * bp[i, j] - 1
                     if margin is not None:
                         s += margin[i,j]
-                    if canonical_base_matrix[i,j] == 1 and s >= 0 :
+                    if canonical_base_matrix[i,j] == 1 and enabled_bp[i, j] >= 2:
                         x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
                         obj.append(s * x[k][i][j])
         prob += pulp.lpSum(obj)

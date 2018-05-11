@@ -5,7 +5,6 @@ import Inference
 import Evaluate
 import Train
 import Test
-from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 import argparse
 
 def train(args):
@@ -51,6 +50,10 @@ def main():
                                  action = 'store_true')
 
     # neural networks architecture
+    parser_training.add_argument('-l','--learning_model',
+                                 help = 'learning_model',
+                                 type=str, default="deepnet")
+
     parser_training.add_argument('-H1','--hidden_insideoutside',
                                  help = 'hidden layer nodes for inside outside',
                                  type=int, default=80)
@@ -66,19 +69,13 @@ def main():
     parser_training.add_argument('-f','--feature',
                                  help = 'feature length',
                                  type=int, default=80)
-    parser_training.add_argument('-l','--learning_model',
-                                 help = 'learning_model',
-                                 type=str, default="deepnet")
 
     parser_training.add_argument('-hn1','--hidden1',
                                  help = 'hidden layer nodes for neighbor model',
                                  type=int, default=200)
     parser_training.add_argument('-hn2','--hidden2',
                                  help = 'hidden layer nodes2 for neighbor model',
-                                 type=int)
-    parser_training.add_argument('-hn3','--hidden3',
-                                 help = 'hidden layer nodes for neighbor model',
-                                 type=int)
+                                 type=int, default=50)
     parser_training.add_argument('-n','--neighbor',
                                  help = 'length of neighbor bases to see',
                                  type=int, default=40)
@@ -90,9 +87,6 @@ def main():
     parser_training.add_argument('-m','--margin',
                                  help = 'margin',
                                  type=float, default=0.2)
-    parser_training.add_argument('-c','--count',
-                                 help = 'Multiply the error by count',
-                                 action = 'store_true')
     parser_training.add_argument('-fu','--fully_learn',
                                  help = 'calculate loss for all canonical pair',
                                  action = 'store_true')
