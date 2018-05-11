@@ -7,7 +7,6 @@ from time import time
 import math
 import random
 import pulp
-import signal
 
 min_loop_length = Config.min_loop_length
 # self.FEATURE_SIZE = Config.feature_length
@@ -402,19 +401,19 @@ class Inference:
     #                 DP[i,j] = max(case1,case2,case3)
     #     return DP
 
-    def basepairmatrix(self):
+    def canonical_basepairs(self):
         sequence = np.array(list(self.seq.upper()))
         bases= ['A', 'U', 'G', 'C']
         matrix = []
         matrix_reverse = []
         for base in bases:
-            a = np.zeros((self.N), dtype=np.float32)
+            a = np.zeros((self.N), dtype=np.int8)
             a[sequence == base] = 1
             a[sequence != base] = 0
-            a = np.tile(a,(self.N,1))
+            a = np.tile(a, (self.N, 1))
             matrix.append(a)
             matrix_reverse.append(a.transpose())
-        all_bases = np.zeros((self.N,self.N), dtype=np.float32)
+        all_bases = np.zeros((self.N,self.N), dtype=np.int8)
         # if tup in [('A', 'U'), ('U', 'A'), ('C', 'G'), ('G', 'C'),('G','U'),('U','G')]:
         for tup in [(0, 1), (1, 0), (2, 3), (3, 2),(1,2),(2,1)]:
             all_bases += matrix[tup[0]] * matrix_reverse[tup[1]]
@@ -429,7 +428,7 @@ class Inference:
         DP_bifarcation_column = np.zeros((self.N,self.N), dtype=np.float32)
 
 
-        canonical_base_matrix = self.basepairmatrix()
+        canonical_base_matrix = self.canonical_basepairs()
 
         for n in range(1,self.N):
             p = BP[self.hash_for_BP(0, n):self.hash_for_BP(0, n+1)].reshape(self.N-n)
@@ -500,23 +499,20 @@ class Inference:
         return pair
 
 
-    def signal_handler(signum, frame):
-        raise Exception("Timed out!")
-
-
     def nussinov(self, BP, gamma, margin=None):
         DP, TP = self.buildDP(BP, gamma=gamma, margin=margin)
         pair = self.traceback(TP, 0, self.N-1, [])
         return pair
 
 
-    def ipknot(self, bp, gamma, margin=None):
+    def ipknot(self, bp, gamma,
+               margin=None, disable_th=False, allowed_bp=None, non_canonical=False):
         prob = pulp.LpProblem("IPknot", pulp.LpMaximize)
         seqlen = self.N
         nlevels = len(gamma)
 
-        if max(gamma)+1 >= seqlen or max(gamma) <= 0:
-            enabled_bp = np.zeros((seqlen, seqlen)) + 2
+        if disable_th or max(gamma)+1 >= seqlen or max(gamma) <= 0:
+            enabled_bp = np.ones((seqlen, seqlen), dtype=np.int8) * 2
 
         else: # acceleration by 'at most gamma+1' candidates for each base
             # reshape BP matrix
@@ -530,24 +526,32 @@ class Inference:
 
             # calculate ranks
             sorted_bp_idx = np.argsort(bp_reshaped)[:, ::-1]
-            enabled_bp = np.zeros((seqlen, seqlen))
+            enabled_bp = np.zeros((seqlen, seqlen), dtype=np.int8)
             for i in range(seqlen):
                 for j in range(int(max(gamma)+1)): # approximate threshold cut
                     enabled_bp[i, sorted_bp_idx[i, j]] = 1
             enabled_bp += np.transpose(enabled_bp)
 
-        canonical_base_matrix = self.basepairmatrix()
+        if allowed_bp is not None:
+            a = np.zeros((seqlen, seqlen), dtype=np.int8)
+            for p in allowed_bp:
+                a[p[0], p[1]] = a[p[1], p[0]] = 1
+            enabled_bp *= a
+
+        if not non_canonical:
+            enabled_bp *= self.canonical_basepairs()
 
         # variables and objective function
         x = [[[None for i in range(seqlen)] for j in range(seqlen)] for k in range(nlevels)]
         obj = []
+        th = 0 if disable_th else 1
         for k in range(nlevels):
             for j in range(seqlen):
                 for i in range(j):
-                    s = (gamma[k]+1) * bp[self.hash_for_BP(i, j)] - 1
+                    s = (gamma[k]+1) * bp[self.hash_for_BP(i, j)] - th
                     if margin is not None:
                         s += margin[i,j]
-                    if canonical_base_matrix[i,j] == 1 and enabled_bp[i, j] >= 2:
+                    if enabled_bp[i, j] >= 2:
                         x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
                         obj.append(s * x[k][i][j])
         prob += pulp.lpSum(obj)
@@ -578,48 +582,13 @@ class Inference:
                             prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
 
         # solve the IP problem
-
-        # signal.signal( signal.SIGALRM, self.signal_handler )
-        # signal.alarm( 30 ) # 60 seconds alarm
-        # try:
-        #     prob.solve(pulp.COIN_CMD())
-        #     signal.alarm(0) # make it disable alarm.
-        # except Exception:
-        #     print ("Timed out!")
-        #     return np.empty((0,2),dtype=np.int16)
         start_ip = time()
-        # print(self.N)
-        # print(signature(CPLEX))
-
-        # solver = CPLEX()
-        # prob.solve(pulp.GLPK_CMD())
-        # prob.solve(pulp.PULP_CBC_CMD(threads=100))
-        # prob.solve(pulp.PULP_CBC_CMD(threads=20,maxSeconds="120"))
-        # prob.solve()
-        # prob.solve(CPLEX(path="/usr/ilog/cplex/"))
-        # prob.solve(CPLEX_DLL(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
         try:
-            # prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex",timelimit=1000))
-            # prob.solve(CPLEX())
-            # prob.solve(CPLEX(timeLimit=1000, msg=False))
-            # prob.solve(CPLEX(timeLimit=10000, msg=False))
             prob.solve()
             # prob.solve(CPLEX(msg=False))
-            # prob.solve(CPLEX_CMD())
-
-            # prob.solve(CPLEX_PY( msg=False))
-            # prob.solve(CPLEX_PY())
-            # if mode == "Train":
-            #     prob.solve()
-            # elif mode == "Test":
-            #     prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
         except KeyError as e:
             return []
 
-        # print(' ipknot : '+str(time() - start_ip)+'sec')
-        # prob.solve(CPLEX(path="/home/akiyama/opt/ibm/ILOG/CPLEX_Studio128/cplex/bin/x86-64_linux/cplex"))
-
-        # print(prob.objective.value())
         pair = [ [] for _ in range(nlevels) ]
         for k in range(nlevels):
             for j in range(seqlen):
@@ -667,6 +636,7 @@ class Inference:
                     s += margin[p[0], p[1]]
 
         else: # ipknot
+            pair = self.ipknot(BP, gamma, disable_th=True, allowed_bp=pair)
             for k, kpair in enumerate(pair):
                 for p in kpair:
                     s += (gamma[k]+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.

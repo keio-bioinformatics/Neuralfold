@@ -17,11 +17,6 @@ import SStruct
 import pickle
 
 
-batch_num = Config.batch_num
-maximum_slots = Config.maximum_slots
-BATCH = Config.BATCH
-Iterative_Parameter_Mixture = Config.Iterative_Parameter_Mixture
-
 class Train:
     def __init__(self, args):
         sstruct = SStruct.SStruct(args.train_file)
@@ -142,10 +137,6 @@ class Train:
 
         return self.model
 
-
-    def wrapper_train(self, batch):
-        name_set, seq_set, structure_set = zip(*batch)
-        return self.train_engine(name_set, seq_set, structure_set)
 
     def train(self):
         #define model
