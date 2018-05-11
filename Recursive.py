@@ -19,15 +19,15 @@ class Recursive_net(Chain):
     #     self.hidden2_marge = args.hidden2_marge
     #     self.activation_function = args.activation_function
 
-    def __init__(self,hidden_insideoutside,hidden2_insideoutside,feature, hidden_marge,hidden2_marge):
+    def __init__(self,hidden_insideoutside,hidden2_insideoutside,feature, hidden_merge,hidden2_merge):
         # define model
         self.hidden_insideoutside = hidden_insideoutside
         self.hidden2_insideoutside = hidden2_insideoutside
 
         self.feature = feature
 
-        self.hidden_marge = hidden_marge
-        self.hidden2_marge = hidden2_marge
+        self.hidden_merge = hidden_merge
+        self.hidden2_merge = hidden2_merge
 
         super(Recursive_net, self).__init__(
             l1 = L.Linear(None, self.hidden_insideoutside),
@@ -35,8 +35,8 @@ class Recursive_net(Chain):
             l3 = L.Linear(None, self.feature),
 
 
-            L1 = L.Linear(None, self.hidden_marge),
-            L2 = L.Linear(None , self.hidden2_marge),
+            L1 = L.Linear(None, self.hidden_merge),
+            L2 = L.Linear(None , self.hidden2_merge),
             L3_1 = L.Linear(None, 1),
             L3_2 = L.Linear(None, 2),
         )
@@ -51,7 +51,7 @@ class Recursive_net(Chain):
 
         else:
             h = F.leaky_relu(self.L1(x))
-            if self.hidden2_marge:
+            if self.hidden2_merge:
                 h = F.leaky_relu(self.L2(h))
                 h = F.sigmoid(self.L3_1(h))
 

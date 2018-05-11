@@ -15,6 +15,7 @@ class Deepnet(Chain):
             L3_1 = L.Linear(None, 1),
         )
 
+
     def __call__(self, x):
         h = F.leaky_relu(self.L1(x))
         if self.hidden2:

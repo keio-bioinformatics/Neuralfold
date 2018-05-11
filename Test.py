@@ -7,28 +7,19 @@ import Inference
 import SStruct
 import Deepnet
 import Evaluate
-#import chainer
+import pickle
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
-# from multiprocessing import Pool
-# import multiprocessing as multi
-maximum_slots = Config.maximum_slots
-batch_num = Config.batch_num
 
 class Test:
     def __init__(self, args):
 
-        sstruct = SStruct.SStruct(args.test_file, False)
+        sstruct = SStruct.SStruct(args.test_file)
         if args.bpseq:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_BPseq()
         else:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
 
-        self.model = Deepnet.Deepnet(40, 200, 50)
-
-        # if args.Parameters:
-        #     serializers.load_npz(args.Parameters.name, self.model)
-        # else:
-        serializers.load_npz("NEURALfold_params.data", self.model)
+        self.model = self.load_model(args.parameters)
 
         self.feature = 80
         self.ipknot = args.ipknot
@@ -37,6 +28,7 @@ class Test:
         if self.ipknot:
             self.gamma = (self.gamma, self.gamma)
         self.args = args
+
 
     def test(self):
         predicted_structure_set = []
@@ -57,5 +49,26 @@ class Test:
             evaluate = Evaluate.Evaluate(predicted_structure_set , self.structure_set)
             Sensitivity, PPV, F_value = evaluate.getscore()
             return Sensitivity, PPV, F_value
+
         else:
             return 0,0,0
+
+
+    def load_model(self, f):
+        with open(f+'.pickle', 'rb') as fp:
+            obj = pickle.load(fp)
+            learning_model = obj[0]
+            obj.pop(0)
+            if learning_model == "recursive":
+                model = Recursive.Recursive_net(*obj)
+
+            elif learning_model == "deepnet":
+                model = Deepnet.Deepnet(*obj)
+
+            else:
+                print("unexpected network")
+                return None
+
+        serializers.load_npz(f+'.npz', model)
+
+        return model

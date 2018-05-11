@@ -14,6 +14,7 @@ import os
 from operator import itemgetter
 import math
 import SStruct
+import pickle
 
 
 batch_num = Config.batch_num
@@ -23,14 +24,14 @@ Iterative_Parameter_Mixture = Config.Iterative_Parameter_Mixture
 
 class Train:
     def __init__(self, args):
-        sstruct = SStruct.SStruct(args.train_file, args.small_structure)
+        sstruct = SStruct.SStruct(args.train_file)
         if args.bpseq:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_BPseq()
         else:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
 
         if args.test_file:
-            sstruct = SStruct.SStruct(args.test_file, args.small_structure)
+            sstruct = SStruct.SStruct(args.test_file)
             if args.bpseq:
                 self.name_set_test, self.seq_set_test, self.structure_set_test = sstruct.load_BPseq()
             else:
@@ -51,13 +52,13 @@ class Train:
         else:
             print("unexpected network")
 
-        if args.Parameters:
-            serializers.load_npz(args.Parameters.name, self.model)
+        if args.init_parameters:
+            serializers.load_npz(args.init_parameters, self.model)
 
         self.optimizer = optimizers.Adam()
         self.optimizer.setup(self.model)
-        if args.Optimizers:
-            serializers.load_npz(args.Optimizers.name, self.optimizer)
+        if args.init_optimizers:
+            serializers.load_npz(args.init_optimizers, self.optimizer)
 
         self.feature = args.feature
         self.pos_margin = args.margin
@@ -74,6 +75,7 @@ class Train:
     def hash_for_BP(self, i, j, N):
         n = j-i
         return int(n * (N + N - n +1)/2 + i)
+
 
     def train_engine(self, name_set, seq_set, true_structure_set):
         # model = Recursive.Recursive_net()
@@ -159,11 +161,10 @@ class Train:
             # print(str(i)+"/"+str(len(self.seq_set)))
 
             print('ite'+str(ite)+': it cost '+str(time() - start_iter)+'sec')
+
             #save model
-            serializers.save_npz("NEURALfold_params.data" + str(ite), self.model)
-            serializers.save_npz("NEURALfold_params.data", self.model)
-            serializers.save_npz('my.state'+ str(ite), self.optimizer)
-            serializers.save_npz('my.state', self.optimizer)
+            self.save_model(self.args.parameters + str(ite))
+            serializers.save_npz(self.args.optimizers + str(ite), self.optimizer)
 
             #TEST
             if (self.test_file is not None):
@@ -196,4 +197,28 @@ class Train:
 
             # print('ite'+str(ite)+': it cost '+str(time() - start)+'sec')
 
+        self.save_model(self.args.parameters)
+
         return self.model
+
+    def save_model(self, f):
+        with open(f+'.pickle', 'wb') as fp:
+            if self.args.learning_model == "recursive":
+                pickle.dump(["recursive",
+                             self.model.hidden_insideoutside,
+                             self.model.hidden2_insideoutside,
+                             self.model.feature,
+                             self.model.hidden_merge,
+                             self.hidden2_merge], fp)
+
+            elif self.args.learning_model == "deepnet":
+                pickle.dump(["deepnet",
+                             self.model.neighbor,
+                             self.model.hidden1,
+                             self.model.hidden2], fp)
+
+            else:
+                print("unexpected network")
+                return
+
+        serializers.save_npz(f+'.npz', self.model)
