@@ -38,7 +38,7 @@ class SStruct:
                 structure_set.append(structure)
                 structure=np.append(structure,line.replace('\n' , ''))
                 if self.small_structure:
-                    if len(line)>50:
+                    if len(line)>10:
                         name_set = np.delete(name_set, -1)
                         seq_set = np.delete(seq_set,-1)
                         structure_set.pop(-1)
@@ -71,7 +71,7 @@ class SStruct:
             seq_set = np.append(seq_set, ''.join(seq))
             structure_set.append(structure)
             if self.small_structure:
-                if len(seq_set[-1])>40:
+                if len(seq_set[-1])>30:
                     seq_set = np.delete(seq_set,-1)
                     structure_set.pop(-1)
 

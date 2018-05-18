@@ -581,15 +581,38 @@ class Inference:
         seqlen = self.N
         nlevels = len(th)
 
-        canonical_base_matrix = self.basepairmatrix()
+        # print(bp)
 
-        # variables
-        x = [[[None for i in range(seqlen)] for j in range(seqlen)] for k in range(nlevels)]
-        for k in range(nlevels):
+        canonical_base_matrix = self.basepairmatrix()
+        # change the BP matrix format(1 dim -> 2dim)
+
+        if seqlen > 150:
+            bp_2_dimension = np.array([[0.0 for i in range(seqlen)] for j in range(seqlen)])
             for j in range(seqlen):
                 for i in range(j):
-                    if float(bp[self.hash_for_BP(i, j)].data) >= th[k] and canonical_base_matrix[i,j] == 1:
-                        x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
+                    if float(bp[self.hash_for_BP(i, j)].data) >= th[0] and canonical_base_matrix[i,j] == 1:
+                        bp_2_dimension[j, i] = bp_2_dimension[i, j] = bp[self.hash_for_BP(i, j)].data
+            # variables
+            x = [[[None for i in range(seqlen)] for j in range(seqlen)] for k in range(nlevels)]
+            for k in range(nlevels):
+                top10_row = np.empty((0, 2),dtype=np.int16)
+                for j in range(seqlen):
+                    index = np.argsort(bp_2_dimension[j,:])[:seqlen-5:-1]
+                    j_seq = np.full(len(index), j)
+                    top10_row = np.append(top10_row, np.concatenate([np.reshape(index,(-1,1)), np.reshape(j_seq,(-1, 1))], axis=1), axis=0)
+                for a in top10_row:
+                    for b in top10_row:
+                        if a[0] == b[1] and a[1] == b[0]:
+                            x[k][a[0]][a[1]] = pulp.LpVariable('x[%d][%d][%d]' % (k, a[0], a[1]), 0, 1, 'Binary')
+
+        else:
+            # variables
+            x = [[[None for i in range(seqlen)] for j in range(seqlen)] for k in range(nlevels)]
+            for k in range(nlevels):
+                for j in range(seqlen):
+                    for i in range(j):
+                        if float(bp[self.hash_for_BP(i, j)].data) >= th[k] and canonical_base_matrix[i,j] == 1:
+                            x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
 
         # objective function
         o = [(float(bp[self.hash_for_BP(i, j)].data)-th[k]) * x[k][i][j]
@@ -647,7 +670,6 @@ class Inference:
                             #         if x[k1][i1][j1] is not None:
                             #             o+=x[k1][i1][j1]
                             # prob += o >= x[k2][i2][j2]
-
 
         # solve the IP problem
         # signal.signal( signal.SIGALRM, self.signal_handler )

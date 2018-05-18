@@ -446,13 +446,13 @@ class Train:
                             continue
                         predicted_structure_set.append(predicted_structure)
 
-                    evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
-                    Sensitivity, PPV, F_value = evaluate.getscore()
+                evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
+                Sensitivity, PPV, F_value = evaluate.getscore()
 
-                    file = open('result.txt', 'a')
-                    result = ['Sensitivity=', str(round(Sensitivity,5)),' ', 'PPV=', str(round(PPV,5)),' ','F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
-                    file.writelines(result)
-                    file.close()
+                file = open('result.txt', 'a')
+                result = ['Sensitivity=', str(round(Sensitivity,5)),' ', 'PPV=', str(round(PPV,5)),' ','F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
+                file.writelines(result)
+                file.close()
                 print(Sensitivity, PPV, F_value)
 
             # print('ite'+str(ite)+': it cost '+str(time() - start)+'sec')
