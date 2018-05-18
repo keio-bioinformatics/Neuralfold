@@ -4,13 +4,13 @@
   <dd>Python 3</dt>
   <dd>Numpy</dt>
   <dd>Chainer 2.0.0 or later</dt>
-  <dd>CPLEX</dt>
+  <dd>CPLEX(optional)</dt>
 </dl>
 
 ## Usage
 NEURALfold can take FASTA and BPseq formatted RNA sequences as input, then predicts its secondary structure.
 ```
-%python NEURALfold.py test  -h
+% python NEURALfold.py test  -h
 usage: prediction of RNA secondary structures test [-h] [-bp] [-ip] [-g GAMMA]
                                                    test_file
 
@@ -32,7 +32,7 @@ GGAUGGAUGUCUGAGCGGUUGAAAGAGUCGGUCUUGAAAACCGAAGUAUUGAUAGGAAUACCGGGGGUUCGAAUCCCUCU
 ```
 If you want to predict pseudoknotted seconrdary structure, use "-ip" option.
 ```
-% python NEURALfold.py test sample.fa
+% python NEURALfold.py test sample.fa -ip
 start testing...
 > DS4440
 GGAUGGAUGUCUGAGCGGUUGAAAGAGUCGGUCUUGAAAACCGAAGUAUUGAUAGGAAUACCGGGGGUUCGAAUCCCUCUCCAUCCG
