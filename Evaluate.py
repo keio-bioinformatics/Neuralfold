@@ -11,11 +11,15 @@ class Evaluate:
         num_predicted_pair = 0
         for predicted_structure, true_structure in zip(self.predicted_structure_set, self.structure_set):
             #print(predicted_structure,true_structure)
-            num_predicted_pair += predicted_structure.shape[0]
-            num_true_pair += true_structure.shape[0]
+            # print(predicted_structure)
+            # num_predicted_pair += predicted_structure.shape[0]
+            num_predicted_pair += len(predicted_structure)
+            num_true_pair += len(true_structure)
+            # num_true_pair += true_structure.shape[0]
             for predicted_pair in predicted_structure:
                 for true_pair in true_structure:
-                    if (predicted_pair == true_pair).all():
+                    # if (predicted_pair == true_pair).all():
+                    if predicted_pair == true_pair:
                         #print(predicted_pair,true_pair)
                         num_correct_pair+=1
         #print(num_correct_pair,num_predicted_pair,num_true_pair)

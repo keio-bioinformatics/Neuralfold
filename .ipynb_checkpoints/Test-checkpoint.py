@@ -25,22 +25,19 @@ class Test:
         self.ipknot = args.ipknot
         self.test_file = args.test_file
         if self.ipknot:
-            if args.gamma:
-                self.gamma = args.gamma
-            else:
-                self.gamma = [3.0,3.0]
+            self.gamma = args.gamma
         else:
             if args.gamma:
                 self.gamma = args.gamma[0]
             else:
-                self.gamma = 3.0
+                self.gamma = 1.0
         self.args = args
 
 
     def test(self):
         predicted_structure_set = []
 
-        for name, seq, true_structure in zip(self.name_set, self.seq_set, self.structure_set):
+        for name,seq in zip(self.name_set, self.seq_set):
             print(name)
 
             inference = Inference.Inference(seq, self.feature)
@@ -49,7 +46,6 @@ class Test:
 
             print(inference.seq)
             print(inference.dot_parentheis(predicted_structure))
-            print(inference.dot_parentheis(true_structure))
 
             predicted_structure_set.append(predicted_structure)
 

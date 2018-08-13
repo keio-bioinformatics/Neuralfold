@@ -19,9 +19,10 @@ import pickle
 
 class Train:
     def __init__(self, args):
-        sstruct = SStruct.SStruct(args.train_file)
+        sstruct = SStruct.SStruct(args.train_file,train=False)
         if args.bpseq:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_BPseq()
+
         else:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
 
@@ -62,7 +63,10 @@ class Train:
         self.ipknot = args.ipknot
         self.test_file = args.test_file
         if self.ipknot:
-            self.gamma = args.gamma
+            if args.gamma:
+                self.gamma = args.gamma
+            else:
+                self.gamma = [3.0,3.0]
         else:
             if args.gamma:
                 self.gamma = args.gamma[0]
@@ -84,9 +88,11 @@ class Train:
         # optimizer = optimizers.SGD()
         # optimizer.setup(model)
         step = 0
+        # print(seq_set)
+        # print(true_structure_set)
         for name, seq, true_structure in zip(name_set, seq_set, true_structure_set):
             print(name, len(seq), 'bp')
-            # print(seq)
+            print(seq)
             # print(true_structure)
             step += 1
             start_BP = time()
@@ -98,7 +104,7 @@ class Train:
             else:
                 print("unexpected network")
 
-            print(' BP : '+str(time() - start_BP)+'sec')
+            # print(' BP : '+str(time() - start_BP)+'sec')
 
             if self.fully_learn:
                 length = len(seq)
@@ -118,22 +124,29 @@ class Train:
                 for true_pair in true_structure:
                     margin[true_pair[0], true_pair[1]] -= self.pos_margin + self.neg_margin
 
+                # Use nussinov regardless of structure when learning
+                # self.ipknot = None
+
                 predicted_structure = inference.ComputePosterior(predicted_BP.data, self.ipknot,
                                                                  gamma=self.gamma, margin=margin)
-                predicted_score = inference.calculate_score(predicted_BP, predicted_structure,
-                                                            gamma=self.gamma, margin=margin)
-                true_score = inference.calculate_score(predicted_BP, true_structure, gamma=self.gamma)
+
+                predicted_score = inference.calculate_score(predicted_BP, self.ipknot, predicted_structure,
+                                                            prediction = True, gamma=self.gamma, margin=margin)
+                true_score = inference.calculate_score(predicted_BP, self.ipknot, true_structure,prediction=False, gamma=self.gamma)
                 loss = predicted_score - true_score
 
-            print(' structure : '+str(time() - start_structure)+'sec')
+            # print(inference.seq)
+            # print(inference.dot_parentheis(predicted_structure))
+            # print(inference.dot_parentheis(true_structure))
+            # print(' structure : '+str(time() - start_structure)+'sec')
 
             start_backward = time()
             self.model.zerograds()
             loss.backward()
-            print(' backward : '+str(time() - start_backward)+'sec')
+            # print(' backward : '+str(time() - start_backward)+'sec')
             start_update = time()
             self.optimizer.update()
-            print(' update : '+str(time() - start_update)+'sec')
+            # print(' update : '+str(time() - start_update)+'sec')
 
         return self.model
 
@@ -155,7 +168,7 @@ class Train:
 
             # print(str(i)+"/"+str(len(self.seq_set)))
 
-            print('ite'+str(ite)+': it cost '+str(time() - start_iter)+'sec')
+            # print('ite'+str(ite)+': it cost '+str(time() - start_iter)+'sec')
 
             #save model
             self.save_model(self.args.parameters + str(ite))
@@ -166,7 +179,7 @@ class Train:
                 predicted_structure_set = []
                 print("start testing...")
                 for seq in self.seq_set_test:
-                    pinference = Inference.Inference(seq,self.feature)
+                    inference = Inference.Inference(seq,self.feature)
                     if self.args.learning_model == "recursive":
                         predicted_BP = inference.ComputeInsideOutside(self.model)
                     elif self.args.learning_model == "deepnet":
@@ -174,20 +187,25 @@ class Train:
                     else:
                         print("unexpected network")
 
-                    predicted_structure = inference.ComputePosterior(predicted_BP, self.ipknot, self.gamma)
+                    predicted_structure = inference.ComputePosterior(predicted_BP.data, self.ipknot, self.gamma)
                     if len(predicted_structure) == 0:
                         continue
+                    if self.ipknot:
+                        predicted_structure = predicted_structure[0] + predicted_structure[1]
                     predicted_structure_set.append(predicted_structure)
 
-                    evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
-                    Sensitivity, PPV, F_value = evaluate.getscore()
+                # print(predicted_structure_set[0])
+                # print(self.structure_set_test[0])
 
-                    file = open('result.txt', 'a')
-                    result = ['Sensitivity=', str(round(Sensitivity,5)),' ',
-                              'PPV=', str(round(PPV,5)),' ',
-                              'F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
-                    file.writelines(result)
-                    file.close()
+                evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
+                Sensitivity, PPV, F_value = evaluate.getscore()
+
+                file = open('result.txt', 'a')
+                result = ['Sensitivity=', str(round(Sensitivity,5)),' ',
+                          'PPV=', str(round(PPV,5)),' ',
+                          'F_value=', str(round(F_value,5)),' ',str(self.gamma),'\n']
+                file.writelines(result)
+                file.close()
                 print(Sensitivity, PPV, F_value)
 
             # print('ite'+str(ite)+': it cost '+str(time() - start)+'sec')

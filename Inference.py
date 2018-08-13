@@ -359,7 +359,7 @@ class Inference:
         side_input_vector = Variable(np.empty((0, side_input_size), dtype=np.float32))
         for base in range(0, self.N):
             side_input_vector = F.vstack((side_input_vector, sequence_vector_neighbor[base:base+(neighbor * 2 + 1)].reshape(1,side_input_size)))
-        all_input_vector = Variable(np.empty((0, side_input_size*2), dtype=np.float32))
+        # all_input_vector = Variable(np.empty((0, side_input_size*2), dtype=np.float32))
 
         # predict BPP
         for interval in range(1, self.N):
@@ -376,8 +376,23 @@ class Inference:
                 surplus = surplus.reshape(row, column)
                 x[0:row,side_input_size-int(column/2)+1:side_input_size+int(column/2)+1].data = surplus.data
 
-            BP = F.vstack((BP, self.model(x).reshape(self.N - interval,1,1)))
+            # add location information
+            direct = False
+            onehot = True
+            if direct:
+                left_location = Variable(np.arange(1, self.N - interval+1, dtype=np.float32).reshape(self.N - interval,1))/10
+                right_location = Variable(np.arange(interval+1, self.N+1, dtype=np.float32).reshape(self.N - interval,1))/10
+                full_length = Variable(np.full(self.N - interval, self.N, dtype=np.float32).reshape(self.N - interval,1))/10
+                x = F.hstack((x, left_location, right_location, full_length))
+            elif onehot:
+                # left_location = Variable(np.eye(80)[np.ceil(np.arange(1, self.N - interval+1, dtype=np.float32)/10).astype(np.int8)].astype(np.float32))
+                # right_location = Variable(np.eye(80)[np.ceil(np.arange(interval+1, self.N+1, dtype=np.float32)/10).astype(np.int8)].astype(np.float32))
+                # full_length = Variable(np.eye(80)[np.ceil(np.full(self.N - interval, self.N, dtype=np.float32)/10).astype(np.int8)].astype(np.float32))
+                interval_length = Variable(np.eye(20)[np.ceil(np.full(self.N - interval, math.log(interval,1.5), dtype=np.float32)).astype(np.int8)].astype(np.float32))
+                # x = F.hstack((x, left_location, right_location, full_length))
+                x = F.hstack((x, interval_length))
 
+            BP = F.vstack((BP, self.model(x).reshape(self.N - interval,1,1)))
         return BP
 
     # def buildDP2(self, BP):
@@ -440,6 +455,8 @@ class Inference:
             case1 = DP[range(1,self.N-n+1),range(n-1,self.N-1)] + s
             case2 = DP[range(1,self.N-n+1),range(n,self.N)]
             case3 = DP[range(0,self.N-n),range(n-1,self.N-1)]
+            # if n <= 3:
+            #     case1=case1-100
             if n >= 3:
                 case4 = DP_bifarcation_row[1:n, 0:self.N-n] + DP_bifarcation_column[self.N-n+1:self.N, n:self.N]
                 DP_diagonal = np.vstack((case1, case2, case3, case4)).max(axis=0)
@@ -525,7 +542,7 @@ class Inference:
                 j += i
 
             # calculate ranks
-            sorted_bp_idx = np.argsort(bp_reshaped)[:, ::-1]
+            sorted_bp_idx = np.argsort(bp_reshaped,axis=1)[:, ::-1]
             enabled_bp = np.zeros((seqlen, seqlen), dtype=np.int8)
             for i in range(seqlen):
                 for j in range(int(max(gamma)+1)): # approximate threshold cut
@@ -553,6 +570,8 @@ class Inference:
                         s += margin[i,j]
                     if enabled_bp[i, j] >= 2:
                         x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
+                        if type(s) is  Variable:
+                            s = s.data
                         obj.append(s * x[k][i][j])
         prob += pulp.lpSum(obj)
 
@@ -595,7 +614,6 @@ class Inference:
                 for i in range(j):
                     if x[k][i][j] is not None and x[k][i][j].value() == 1:
                         pair[k].append((i,j))
-
         return pair
 
 
@@ -621,7 +639,7 @@ class Inference:
             return "".join(y)
 
 
-    def calculate_score(self, BP, pair, gamma, margin=None):
+    def calculate_score(self,  BP, ipknot, pair, prediction, gamma, margin=None):
         s = np.zeros((1,1), dtype=np.float32)
         if type(BP) is Variable:
             s = Variable(s)
@@ -629,19 +647,26 @@ class Inference:
         if len(pair) == 0:
             pass
 
-        elif len(pair[0]) > 0 and type(pair[0][0]) is int: # nussinov
+        elif ipknot: # ipknot
+            # print(pair)
+            if prediction==False:
+                pair = self.ipknot(BP, gamma, disable_th=True, allowed_bp=pair)
+            # print(pair)
+            for k, kpair in enumerate(pair):
+                for p in kpair:
+                    s += (gamma[k]+1) * BP[self.hash_for_BP(p[0], p[1])] - 1.
+                    if margin is not None:
+                        s += margin[p[0], p[1]]
+
+
+        # elif len(pair[0]) > 0 and type(pair[0][0]) is int: # nussinov
+        # elif type(gamma) is not  list: # nussinov
+        else: # nussinov
             for p in pair:
                 s += (gamma+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.
                 if margin is not None:
                     s += margin[p[0], p[1]]
 
-        else: # ipknot
-            pair = self.ipknot(BP, gamma, disable_th=True, allowed_bp=pair)
-            for k, kpair in enumerate(pair):
-                for p in kpair:
-                    s += (gamma[k]+1.) * BP[self.hash_for_BP(p[0], p[1])] - 1.
-                    if margin is not None:
-                        s += margin[p[0], p[1]]
 
         return s.reshape(1,)
 

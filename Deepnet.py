@@ -21,4 +21,5 @@ class Deepnet(Chain):
         if self.hidden2:
             h = F.leaky_relu(self.L2(h))
         h = F.sigmoid(self.L3_1(h))
+        # h = F.leaky_relu(self.L3_1(h))
         return h

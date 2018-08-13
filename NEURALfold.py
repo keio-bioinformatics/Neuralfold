@@ -41,7 +41,8 @@ def main():
     parser_training.add_argument('-p','--parameters', help = 'Output parameter file',
                                  type=str, default="NEURALfold_parameters")
     parser_training.add_argument('--init-optimizers', help = 'Initial optimizer state file',
-                                 type=argparse.FileType('r'))
+                                 # type=argparse.FileType('r'))
+                                 type=str)
     parser_training.add_argument('-o','--optimizers', help = 'Optimizer state file',
                                  type=str, default="state.npz")
     parser_training.add_argument('-i','--iteration', help = 'number of iteration',
@@ -68,7 +69,7 @@ def main():
                                  type=int)
     parser_training.add_argument('-f','--feature',
                                  help = 'feature length',
-                                 type=int, default=80)
+                                 type=int, default=40)
 
     parser_training.add_argument('-hn1','--hidden1',
                                  help = 'hidden layer nodes for neighbor model',
@@ -104,7 +105,9 @@ def main():
     parser_test = subparser.add_parser('test', help='test secondary structures')
     parser_test.add_argument('test_file',
                              help = 'FASTA or BPseq file for test',
+                             nargs='+',
                              type=argparse.FileType('r'))
+                             # type=open)
     parser_test.add_argument('-p', '--parameters', help = 'Initial parameter file',
                              type=str, default="NEURALfold_parameters")
     parser_test.add_argument('-bp','--bpseq', help =
