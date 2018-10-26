@@ -1,5 +1,5 @@
 import numpy as np
-import Config
+from . import Config
 #import Recursive
 import chainer.links as L
 import chainer.functions as F

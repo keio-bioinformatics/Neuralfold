@@ -1,10 +1,12 @@
+#!/usr/bin/env python
+
 import numpy as np
 import sys
-import SStruct
-import Inference
-import Evaluate
-import Train
-import Test
+from . import SStruct
+from . import Inference
+from . import Evaluate
+from . import Train
+from . import Test
 import argparse
 
 def train(args):

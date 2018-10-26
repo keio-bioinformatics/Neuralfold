@@ -1,19 +1,19 @@
 import numpy as np
-import Config
-import Recursive
-import Deepnet
+from . import Config
+from . import Recursive
+from . import Deepnet
 import chainer.links as L
 import chainer.functions as F
-import Inference
+from . import Inference
 from time import time
-import Test
-import Evaluate
+from .import Test
+from . import Evaluate
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 import random
 import os
 from operator import itemgetter
 import math
-import SStruct
+from . import SStruct
 import pickle
 
 

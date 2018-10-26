@@ -1,5 +1,5 @@
 import numpy as np
-import Config
+from . import Config
 import chainer.links as L
 import chainer.functions as F
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
