@@ -1,7 +1,5 @@
-import numpy as np
-
 class SStruct:
-    def __init__(self,filename,train=False):
+    def __init__(self, filename, train=False):
         self.filename = filename
         #reverse
         self.train = train

@@ -72,28 +72,6 @@ class Inference:
         #         # print(base)
         #         return Variable(np.array([[0,0,0,0]] , dtype=np.float32))
 
-    # def ComputeInside_Parallel(self, i, j, inside1, inside2, inside3):
-    def ComputeInside_Parallel(self, i, j):
-        x = F.concat((FM_inside[i][j-1] , FM_inside[i+1][j-1] , FM_inside[i+1][j] , self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        # x = F.concat((inside1, inside2, inside3, self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        return self.model(x)
-
-    def ComputeOutside_Parallel(self, i, j, outside1, outside2, outside3):
-        # a = i-1
-        # b = j+1
-        # if i == 0:
-        #     a = self.N-1
-        # if j == self.N-1:
-        #     b = 0
-        x = F.concat((outside1, outside2, outside3, self.base_represent(self.seq[i]) , self.base_represent(self.seq[j])) ,axis=1)
-        return self.model(x)
-
-    def wrapper_inside(self,args):
-        return self.ComputeInside_Parallel(*args)
-
-    def wrapper_outside(self,args):
-        return self.ComputeOutside_Parallel(*args)
-
     def hash_for_inside(self, i, j):
         n = j-i
         return int(n * (self.N + self.N - n +1)/2 + i)
@@ -283,15 +261,6 @@ class Inference:
                 # print(' outside_row : '+str(time() - start_outside_row)+'sec')
         # print(' outside : '+str(time() - start_outside)+'sec')
         return FM_outside
-
-    def wrapper_insideoutside(self, changer):
-        if changer == "inside":
-            return self.Compute_Inside()
-        elif changer == "outside":
-            return self.Compute_Outside()
-        else:
-            print("error")
-            return
 
     def ComputeInsideOutside(self, model):
         self.model = model
