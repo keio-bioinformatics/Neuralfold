@@ -10,7 +10,7 @@ class Decoder:
             return self.dot_parenthesis(seq, [pair])
 
         else: # ipknot
-            parens = "()[]{}<>"
+            parens = r'()[]{}<>'
             assert len(pair) < len(parens)/2, "exceed max levels"
             y = ['.']*len(seq)
             for k, kpair in enumerate(pair):

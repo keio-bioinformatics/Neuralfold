@@ -3,15 +3,18 @@ from chainer import Variable
 from . import Decoder
 
 class Nussinov(Decoder):
-    def __init__(self):
-        pass
+    def __init__(self, use_simple_dp=False):
+        self.use_simple_dp = use_simple_dp
 
     def decode(self, bpp, gamma, margin=None, allowed_bp=None):
         '''Nussinov-style decoding algorithm    
         '''
         seqlen = len(bpp)
-        #_, tr = self.build_dp(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
-        _, tr = self.build_dp_v(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
+        bpp = bpp.data if type(bpp) is Variable else bpp
+        if self.use_simple_dp:
+            _, tr = self.build_dp(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
+        else:
+            _, tr = self.build_dp_v(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
         pair = self.traceback(tr, 0, seqlen-1, [])
         return pair
 
@@ -88,6 +91,19 @@ class Nussinov(Decoder):
                 pair = self.traceback(tr, i, k, pair)
                 pair = self.traceback(tr, k+1, j, pair)
         return pair
+
+    def calc_score(self, bpp, gamma, pair, margin=None):
+        s = np.zeros((1,1), dtype=np.float32)
+        if type(bpp) is Variable:
+            s = Variable(s)
+
+        for i, j in pair:
+            s += (gamma + 1) * bpp[i, j] - 1
+            if margin is not None:
+                s += margin[i, j]
+
+        return s.reshape(1,)
+
 
 if __name__ == '__main__':
     import sys
