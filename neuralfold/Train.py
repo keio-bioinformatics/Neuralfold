@@ -5,8 +5,8 @@ import chainer.links as L
 import chainer.functions as F
 from . import Inference
 from time import time
-from .import Test
-from . import Evaluate
+from .predict import Predict
+from . import evaluate
 from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
 import random
 import os

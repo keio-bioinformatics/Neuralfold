@@ -3,17 +3,17 @@ from . import Config
 from . import Recursive
 from . import Inference
 from . import SStruct
-from . import Evaluate
+from . import evaluate
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model.mlp import MLP
 import pickle
 from chainer import serializers
 
-class Test:
+class Predict:
     def __init__(self, args):
 
-        sstruct = SStruct.SStruct(args.test_file)
+        sstruct = SStruct.SStruct(args.seq_file)
         if args.bpseq:
             self.name_set, self.seq_set, self.structure_set = sstruct.load_BPseq()
         else:
@@ -23,7 +23,7 @@ class Test:
 
         self.feature = 80
         self.ipknot = args.ipknot
-        self.test_file = args.test_file
+        self.seq_file = args.seq_file
         if self.ipknot:
             self.decoder = IPknot()    
             if args.gamma:
@@ -39,31 +39,24 @@ class Test:
         self.args = args
 
 
-    def test(self):
+    def run(self):
         predicted_structure_set = []
 
-        for name, seq, true_structure in zip(self.name_set, self.seq_set, self.structure_set):
+        for name, seq in zip(self.name_set, self.seq_set):
             print(name)
-
-            #inference = Inference.Inference(seq, self.feature)
-            #predicted_BP = inference.ComputeNeighbor(self.model)
-            #predicted_structure = inference.ComputePosterior(predicted_BP.data, self.ipknot, self.gamma)
             predicted_BP = self.model.compute_bpp(seq)
             predicted_structure = self.decoder.decode(predicted_BP.data, gamma=self.gamma)
 
             print(seq)
             print(self.decoder.dot_parenthesis(seq, predicted_structure))
-            print(self.decoder.dot_parenthesis(seq, true_structure))
-
             predicted_structure_set.append(predicted_structure)
 
         if self.structure_set:
-            evaluate = Evaluate.Evaluate(predicted_structure_set , self.structure_set)
-            Sensitivity, PPV, F_value = evaluate.get_score()
+            Sensitivity, PPV, F_value = evaluate.get_score(self.structure_set, predicted_structure_set)
             return Sensitivity, PPV, F_value
 
         else:
-            return 0,0,0
+            return 0, 0, 0
 
 
     def load_model(self, f):
@@ -89,22 +82,22 @@ class Test:
     def add_args(cls, parser):
         import argparse
         # add subparser for test
-        parser_test = parser.add_parser('test', help='test secondary structures')
-        parser_test.add_argument('test_file',
-                                help = 'FASTA or BPseq file for test',
+        parser_pred = parser.add_parser('predict', help='Predict RNA secondary structures for given sequences')
+        parser_pred.add_argument('seq_file',
+                                help = 'FASTA or BPseq file for prediction',
                                 nargs='+',
                                 type=argparse.FileType('r'))
                                 # type=open)
-        parser_test.add_argument('-p', '--parameters', help = 'Initial parameter file',
+        parser_pred.add_argument('-p', '--parameters', help = 'Initial parameter file',
                                 type=str, default="NEURALfold_parameters")
-        parser_test.add_argument('-bp','--bpseq', help =
+        parser_pred.add_argument('-bp','--bpseq', help =
                                 'use bpseq format',
                                 action = 'store_true')
-        parser_test.add_argument('-ip','--ipknot',
-                                help = 'predict pseudoknotted secaondary structure',
+        parser_pred.add_argument('-ip','--ipknot',
+                                help = 'predict pseudoknotted secondary structures',
                                 action = 'store_true')
-        parser_test.add_argument('-g','--gamma',
+        parser_pred.add_argument('-g','--gamma',
                                 help = 'balance between the sensitivity and specificity ',
                                 type=float, action='append')
 
-        parser_test.set_defaults(func = lambda args: Test(args).test())
+        parser_pred.set_defaults(func = lambda args: Predict(args).run())

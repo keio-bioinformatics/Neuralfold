@@ -4,7 +4,7 @@ import argparse
 import os.path
 import sys
 
-from .Test import Test
+from .predict import Predict
 #from . import Evaluate
 from .Train import Train
 
@@ -17,7 +17,7 @@ def main():
     subparser = parser.add_subparsers(title='Sub-commands')
     parser.set_defaults(func = None)
     Train.add_args(subparser)
-    Test.add_args(subparser)
+    Predict.add_args(subparser)
     args = parser.parse_args()
     if args.func is None:
         parser.print_help()
