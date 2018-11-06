@@ -1,36 +1,29 @@
-import numpy as np
-from . import Config
-from . import Recursive
-import chainer.links as L
-import chainer.functions as F
-from . import Inference
-from time import time
-from .predict import Predict
-from . import evaluate
-from chainer import optimizers, Chain, Variable, cuda, optimizer, serializers
-import random
-import os
-from operator import itemgetter
 import math
-from . import SStruct
+import os
 import pickle
+import random
+from time import time
+
+import chainer.functions as F
+import chainer.links as L
+import numpy as np
+from chainer import Chain, Variable, cuda, optimizer, optimizers, serializers
+
+from . import Config, Inference, Recursive, bpseq, evaluate, fasta
 
 
 class Train:
     def __init__(self, args):
-        sstruct = SStruct.SStruct(args.train_file,train=False)
         if args.bpseq:
-            self.name_set, self.seq_set, self.structure_set = sstruct.load_BPseq()
-
+            self.name_set, self.seq_set, self.structure_set = bpseq.load(args.train_file)
         else:
-            self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
+            self.name_set, self.seq_set, self.structure_set = fasta.load(args.train_file)
 
         if args.test_file:
-            sstruct = SStruct.SStruct(args.test_file)
             if args.bpseq:
-                self.name_set_test, self.seq_set_test, self.structure_set_test = sstruct.load_BPseq()
+                self.name_set_test, self.seq_set_test, self.structure_set_test = bpseq.load(args.test_file)
             else:
-                self.name_set_test, self.seq_set_test, self.structure_set_test = sstruct.load_FASTA()
+                self.name_set_test, self.seq_set_test, self.structure_set_test = fasta.load(args.test_file)
         else:
             self.seq_set_test = None
 

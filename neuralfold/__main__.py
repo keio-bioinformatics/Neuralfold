@@ -6,7 +6,7 @@ import sys
 
 from .predict import Predict
 #from . import Evaluate
-from .Train import Train
+from .train import Train
 
 
 def main():

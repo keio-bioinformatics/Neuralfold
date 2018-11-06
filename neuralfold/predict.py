@@ -1,29 +1,25 @@
+import pickle
+
 import numpy as np
-from . import Config
-from . import Recursive
-from . import Inference
-from . import SStruct
-from . import evaluate
+from chainer import serializers
+
+from . import Config, Inference, Recursive, SStruct, bpseq, evaluate, fasta
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model.mlp import MLP
-import pickle
-from chainer import serializers
+
 
 class Predict:
     def __init__(self, args):
-
-        sstruct = SStruct.SStruct(args.seq_file)
         if args.bpseq:
-            self.name_set, self.seq_set, self.structure_set = sstruct.load_BPseq()
+            self.name_set, self.seq_set, self.structure_set = bpseq.load(args.seq_file)
         else:
-            self.name_set, self.seq_set, self.structure_set = sstruct.load_FASTA()
+            self.name_set, self.seq_set, self.structure_set = fasta.load(args.seq_file)
 
         self.model = self.load_model(args.parameters)
 
         self.feature = 80
         self.ipknot = args.ipknot
-        self.seq_file = args.seq_file
         if self.ipknot:
             self.decoder = IPknot()    
             if args.gamma:

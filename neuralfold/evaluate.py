@@ -1,8 +1,16 @@
 def get_score(ref_set, pred_set, global_average=True):
+    def flattern(paren_list):
+        if len(paren_list) == 0 or type(paren_list[0][0]) is int:
+            return paren_list
+        else:
+            ret = []
+            for p in paren_list:
+                ret += p
+            return ret
 
     def get_counts(ref_str, pred_str):
-        ref_str = set(ref_str)
-        pred_str = set(pred_str)
+        ref_str = set(flattern(ref_str))
+        pred_str = set(flattern(pred_str))
         tp = len(ref_str & pred_str)
         fn = len(ref_str) - tp
         fp = len(pred_str) - tp
