@@ -59,7 +59,7 @@ class Test:
 
         if self.structure_set:
             evaluate = Evaluate.Evaluate(predicted_structure_set , self.structure_set)
-            Sensitivity, PPV, F_value = evaluate.getscore()
+            Sensitivity, PPV, F_value = evaluate.get_score()
             return Sensitivity, PPV, F_value
 
         else:

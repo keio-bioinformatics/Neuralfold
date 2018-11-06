@@ -197,7 +197,7 @@ class Train:
                 # print(self.structure_set_test[0])
 
                 evaluate = Evaluate.Evaluate(predicted_structure_set, self.structure_set_test)
-                Sensitivity, PPV, F_value = evaluate.getscore()
+                Sensitivity, PPV, F_value = evaluate.get_score()
 
                 file = open('result.txt', 'a')
                 result = ['Sensitivity=', str(round(Sensitivity,5)),' ',

@@ -1,7 +1,9 @@
 import numpy as np
 import pulp
 from chainer import Variable
+
 from . import Decoder
+
 
 class IPknot(Decoder):
     def __init__(self):

@@ -1,18 +1,20 @@
 #!/usr/bin/env python
 
-import sys
+import argparse
 import os.path
+import sys
+
+from .Test import Test
 #from . import Evaluate
 from .Train import Train
-from .Test import Test
-import argparse
+
 
 def main():
     parser = argparse.ArgumentParser(
         description='NeuralFold: Direct inference of base-pairing probabilities with neural networks improves RNA secondary structure prediction with pseudoknots.',
         add_help=True,
     )
-    subparser = parser.add_subparsers(title='Subcommands')
+    subparser = parser.add_subparsers(title='Sub-commands')
     parser.set_defaults(func = None)
     Train.add_args(subparser)
     Test.add_args(subparser)

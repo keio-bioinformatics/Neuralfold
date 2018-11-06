@@ -1,5 +1,6 @@
 import numpy as np
 from chainer import Variable
+
 from . import Decoder
 
 class Nussinov(Decoder):
