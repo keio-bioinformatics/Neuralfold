@@ -9,23 +9,18 @@ import argparse
 
 def main():
     parser = argparse.ArgumentParser(
-        prog='Neuralfold',
-        usage=os.path.basename(sys.argv[0]), #'neuralfold',
-        description='description',
-        epilog='end',
+        description='NeuralFold: Direct inference of base-pairing probabilities with neural networks improves RNA secondary structure prediction with pseudoknots.',
         add_help=True,
     )
-
-    subparser = parser.add_subparsers(
-        title='SubCommands',
-        description='SubCommands descript',
-        help='SubCommand help')
-
-    Train.parse_args(subparser)
-    Test.parse_args(subparser)
-
+    subparser = parser.add_subparsers(title='Subcommands')
+    parser.set_defaults(func = None)
+    Train.add_args(subparser)
+    Test.add_args(subparser)
     args = parser.parse_args()
-    args.func(args)
+    if args.func is None:
+        parser.print_help()
+    else:
+        args.func(args)
 
 if __name__ == '__main__':
     main()

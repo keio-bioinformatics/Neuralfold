@@ -86,7 +86,7 @@ class Test:
         return model
 
     @classmethod
-    def parse_args(cls, parser):
+    def add_args(cls, parser):
         import argparse
         # add subparser for test
         parser_test = parser.add_parser('test', help='test secondary structures')

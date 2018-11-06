@@ -236,7 +236,7 @@ class Train:
         serializers.save_npz(f+'.npz', self.model)
 
     @classmethod
-    def parse_args(cls, parser):
+    def add_args(cls, parser):
         import argparse
         # add subparser for training
         parser_training = parser.add_parser('train', help='training RNA secondary structures')
