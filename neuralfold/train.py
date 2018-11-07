@@ -42,7 +42,7 @@ class Train:
         else:
             try:
                 klass = globals()[args.learning_model]
-                self.model = klass(klass.parse_args(args))
+                self.model = klass(**klass.parse_args(args))
             except KeyError:
                 raise RuntimeError("{} is unknown model class.".format(args.learning_model))
 
@@ -76,7 +76,7 @@ class Train:
             predicted_BP = self.model.compute_bpp(seq)
 
             #start_structure = time()
-            margin = np.full_like(predicted_BP, self.neg_margin)
+            margin = np.full_like(predicted_BP.data, self.neg_margin)
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
