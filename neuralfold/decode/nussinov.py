@@ -4,12 +4,14 @@ from chainer import Variable
 from . import Decoder
 
 class Nussinov(Decoder):
-    def __init__(self, use_simple_dp=False):
+    def __init__(self, gamma=None, use_simple_dp=False):
+        self.gamma = gamma
         self.use_simple_dp = use_simple_dp
 
-    def decode(self, bpp, gamma, margin=None, allowed_bp=None):
+    def decode(self, bpp, gamma=None, margin=None, allowed_bp=None):
         '''Nussinov-style decoding algorithm    
         '''
+        gamma = self.gamma if gamma is None else gamma
         seqlen = len(bpp)
         bpp = bpp.data if type(bpp) is Variable else bpp
         if self.use_simple_dp:
@@ -93,7 +95,8 @@ class Nussinov(Decoder):
                 pair = self.traceback(tr, k+1, j, pair)
         return pair
 
-    def calc_score(self, bpp, gamma, pair, margin=None):
+    def calc_score(self, bpp, pair, gamma=None, margin=None):
+        gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)
         if type(bpp) is Variable:
             s = Variable(s)
@@ -122,12 +125,12 @@ if __name__ == '__main__':
             fastas.remove("")
             return [split_seq(l) for l in fastas]
     
-    nussinov = Nussinov()
+    nussinov = Nussinov(gamma=9.0)
     for fa in read_fasta(sys.argv[1]):
         rna = RNA.fold_compound(fa['seq'])
         rna.pf()
         print(">"+fa['name'])
         print(fa['seq'])
         bpp = np.array(rna.bpp())
-        pred = nussinov.decode(bpp[1:, 1:], gamma=9.0)
+        pred = nussinov.decode(bpp[1:, 1:])
         print(nussinov.dot_parenthesis(fa['seq'], pred))

@@ -1,14 +1,17 @@
 import math
-import numpy as np
-import chainer.links as L
+import pickle
+
 import chainer.functions as F
-from chainer import Chain, Variable
-from .. import Config
+import chainer.links as L
+import numpy as np
+from chainer import Chain, Variable, serializers
+
 from .util import base_represent
+
 
 class MLP(Chain):
 
-    def __init__(self, neighbor, hidden1, hidden2):
+    def __init__(self, neighbor=None, hidden1=None, hidden2=None):
         self.neighbor = neighbor
         self.hidden1 = hidden1
         self.hidden2 = hidden2
@@ -27,9 +30,37 @@ class MLP(Chain):
         # h = F.leaky_relu(self.L3_1(h))
         return h
 
+
+    def save_model(self, f):
+        with open(f+'.pickle', 'wb') as fp:
+            pickle.dump(self.__class__.__name__, fp)
+            pickle.dump(self.parse_args(self), fp)
+        serializers.save_npz(f+'.npz', self)
+
+
+    @classmethod
+    def add_args(cls, parser):
+        group = parser.add_argument_group('Options for MLP model')
+        group.add_argument('-hn1','--hidden1',
+                           help = 'hidden layer nodes for neighbor model',
+                           type=int, default=200)
+        group.add_argument('-hn2','--hidden2',
+                           help = 'hidden layer nodes2 for neighbor model',
+                           type=int, default=50)
+        group.add_argument('-n','--neighbor',
+                           help = 'length of neighbor bases to see',
+                           type=int, default=40)
+
+
+    @classmethod    
+    def parse_args(cls, args):
+        hyper_params = ('neighbor', 'hidden1', 'hidden2')
+        return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
+
+
     def compute_bpp(self, seq):
         N = len(seq)
-        base_length = Config.base_length
+        base_length = 5
         neighbor = self.neighbor
         sequence_vector = np.empty((0, base_length), dtype=np.float32)
         for base in seq:

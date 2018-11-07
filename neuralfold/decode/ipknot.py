@@ -6,12 +6,13 @@ from . import Decoder
 
 
 class IPknot(Decoder):
-    def __init__(self):
-        pass
+    def __init__(self, gamma=None):
+        self.gamma = gamma
     
-    def decode(self, bpp, gamma, margin=None, allowed_bp=None, disable_th=False):
+    def decode(self, bpp, gamma=None, margin=None, allowed_bp=None, disable_th=False):
         '''IPknot-style decoding algorithm    
         '''
+        gamma = self.gamma if gamma is None else gamma
         prob = pulp.LpProblem("IPknot", pulp.LpMaximize)
         seqlen = len(bpp)
         nlevels = len(gamma)
@@ -92,7 +93,8 @@ class IPknot(Decoder):
                         pair[k].append((i,j))
         return pair
     
-    def calc_score(self, bpp, gamma, pair, margin=None):
+    def calc_score(self, bpp, pair, gamma=None, margin=None):
+        gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)
         if type(bpp) is Variable:
             s = Variable(s)
@@ -128,14 +130,14 @@ if __name__ == '__main__':
             fastas.remove("")
             return [split_seq(l) for l in fastas]
     
-    ipknot = IPknot()
+    ipknot = IPknot(gamma=[9.0, 9.0])
     for fa in read_fasta(sys.argv[1]):
         rna = RNA.fold_compound(fa['seq'])
         rna.pf()
         print(">"+fa['name'])
         print(fa['seq'])
         bpp = np.array(rna.bpp())
-        pred = ipknot.decode(bpp[1:, 1:], [9.0, 9.0])
+        pred = ipknot.decode(bpp[1:, 1:])
         print(ipknot.dot_parenthesis(fa['seq'], pred))
         # pred = ipknot.decode(bpp[1:, 1:], [9.0])
         # print(ipknot.dot_parenthesis(fa['seq'], pred))

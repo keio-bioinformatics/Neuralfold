@@ -3,10 +3,11 @@ import pickle
 import numpy as np
 from chainer import serializers
 
-from . import Config, Inference, Recursive, SStruct, bpseq, evaluate, fasta
+from . import bpseq, evaluate, fasta
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model.mlp import MLP
+from .model import load_model
 
 
 class Predict:
@@ -16,24 +17,14 @@ class Predict:
         else:
             self.name_set, self.seq_set, self.structure_set = fasta.load(args.seq_file)
 
-        self.model = self.load_model(args.parameters)
+        self.model = load_model(args.parameters)
 
-        self.feature = 80
-        self.ipknot = args.ipknot
-        if self.ipknot:
-            self.decoder = IPknot()    
-            if args.gamma:
-                self.gamma = args.gamma
-            else:
-                self.gamma = [3.0,3.0]
+        if args.ipknot:
+            gamma = args.gamma if args.gamma is not None else (3.0, 3.0)
+            self.decoder = IPknot(gamma)
         else:
-            self.decoder = Nussinov()
-            if args.gamma:
-                self.gamma = args.gamma[0]
-            else:
-                self.gamma = 3.0
-        self.args = args
-
+            gamma = args.gamma if args.gamma is not None else 3.0
+            self.decoder = Nussinov(gamma)
 
     def run(self):
         predicted_structure_set = []
@@ -41,7 +32,7 @@ class Predict:
         for name, seq in zip(self.name_set, self.seq_set):
             print(name)
             predicted_BP = self.model.compute_bpp(seq)
-            predicted_structure = self.decoder.decode(predicted_BP.data, gamma=self.gamma)
+            predicted_structure = self.decoder.decode(predicted_BP.data)
 
             print(seq)
             print(self.decoder.dot_parenthesis(seq, predicted_structure))
@@ -55,25 +46,6 @@ class Predict:
             return 0, 0, 0
 
 
-    def load_model(self, f):
-        with open(f+'.pickle', 'rb') as fp:
-            obj = pickle.load(fp)
-            learning_model = obj[0]
-            obj.pop(0)
-            if learning_model == "recursive":
-                model = Recursive.Recursive_net(*obj)
-
-            elif learning_model == "deepnet":
-                model = MLP(*obj)
-
-            else:
-                print("unexpected network")
-                return None
-
-        serializers.load_npz(f+'.npz', model)
-
-        return model
-
     @classmethod
     def add_args(cls, parser):
         import argparse
@@ -83,17 +55,16 @@ class Predict:
                                 help = 'FASTA or BPseq file for prediction',
                                 nargs='+',
                                 type=argparse.FileType('r'))
-                                # type=open)
         parser_pred.add_argument('-p', '--parameters', help = 'Initial parameter file',
                                 type=str, default="NEURALfold_parameters")
         parser_pred.add_argument('-bp','--bpseq', help =
-                                'use bpseq format',
+                                'Use bpseq format',
                                 action = 'store_true')
         parser_pred.add_argument('-ip','--ipknot',
-                                help = 'predict pseudoknotted secondary structures',
+                                help = 'Predict pseudoknotted secondary structures',
                                 action = 'store_true')
         parser_pred.add_argument('-g','--gamma',
-                                help = 'balance between the sensitivity and specificity ',
+                                help = 'Balance between sensitivity and specificity ',
                                 type=float, action='append')
 
         parser_pred.set_defaults(func = lambda args: Predict(args).run())

@@ -1,8 +1,7 @@
 import numpy as np
-from .. import Config
 
 def base_represent(base):
-    if Config.gpu == True:
+    if False: #gpu == True:
         print("gpu")
         # xp = cuda.cupy
         # if base in ['A' ,'a']:
