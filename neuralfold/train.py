@@ -7,7 +7,10 @@ from time import time
 import chainer.functions as F
 import chainer.links as L
 import numpy as np
-from chainer import Chain, Variable, cuda, optimizer, optimizers, serializers
+from chainer import (Chain, Variable, cuda, iterators, optimizer, optimizers,
+                     serializers, training)
+from chainer.dataset import concat_examples
+from chainer.training import extensions
 
 from . import bpseq, evaluate, fasta
 from .decode.ipknot import IPknot
@@ -64,49 +67,55 @@ class Train:
             self.decoder = Nussinov(gamma)
 
 
-    def train_engine(self, name_set, seq_set, true_structure_set):
-        #start_iter = time()
-        step = 0
+    def calculate_loss(self, name_set, seq_set, true_structure_set):
+        loss = Variable(np.zeros((1,), dtype=np.float32))
         for name, seq, true_structure in zip(name_set, seq_set, true_structure_set):
             print(name, len(seq), 'bp')
-            print(seq)
-            # print(true_structure)
-            step += 1
-            #start_BP = time()
             predicted_BP = self.model.compute_bpp(seq)
 
-            #start_structure = time()
-            margin = np.full_like(predicted_BP.data, self.neg_margin)
+            margin = np.full_like(predicted_BP.array, self.neg_margin)
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(predicted_BP.data, margin=margin)
+            predicted_structure = self.decoder.decode(predicted_BP.array, margin=margin)
             predicted_score = self.decoder.calc_score(predicted_BP, pair=predicted_structure, margin=margin)
             true_score = self.decoder.calc_score(predicted_BP, pair=true_structure)
-            loss = predicted_score - true_score
+            loss += predicted_score - true_score
 
-            #start_backward = time()
-            self.model.zerograds()
-            loss.backward()
-            #start_update = time()
-            self.optimizer.update()
-
-        return self.model
+        return loss
 
 
     def run(self):
-        for ite in range(self.epochs):
-            print('ite = ' +  str(ite))
-            # start_iter = time()
+        self.batchsize = 1
+        training_data = list(zip(self.name_set, self.seq_set, self.structure_set))
+        train_iter = iterators.SerialIterator(training_data, self.batchsize)
 
-            list_for_shuffle = list(zip(self.name_set, self.seq_set, self.structure_set))
-            random.shuffle(list_for_shuffle)
-            name_set, seq_set, structure_set = zip(*list_for_shuffle)
-            self.train_engine(name_set, seq_set, structure_set)
+        updater = training.StandardUpdater(train_iter, self.optimizer, 
+            converter=lambda batch, device: tuple(zip(*batch)),
+            loss_func=self.calculate_loss)
+        trainer = training.Trainer(updater, (self.epochs, 'epoch'), out='res')
+        trainer.extend(extensions.LogReport())
+        #trainer.extend(extensions.snapshot(filename='snapshot_epoch-{.updater.epoch}'))
+        trainer.run()
 
-            # save model
-            self.model.save_model(self.param_file + str(ite))
-            serializers.save_npz(self.param_file + "_state" + str(ite) + ".npz", self.optimizer)
+        self.model.save_model(self.param_file)
+
+        return
+
+        # while train_iter.epoch < self.epochs:
+        #     print('epoch =', train_iter.epoch)
+        #     train_batch = train_iter.next()
+        #     name, seq, true_structure = zip(*train_batch)
+        #     loss = self.calculate_loss(name, seq, true_structure)
+
+        #     self.model.zerograds()
+        #     loss.backward()
+        #     self.optimizer.update()
+
+        #     if train_iter.is_new_epoch:
+        #         # save model
+        #         self.model.save_model(self.param_file + str(train_iter.epoch))
+        #         serializers.save_npz(self.param_file + "_state" + str(train_iter.epoch) + ".npz", self.optimizer)
 
             #TEST
             # if (self.test_file is not None):
@@ -144,9 +153,9 @@ class Train:
 
             # print('ite'+str(ite)+': it cost '+str(time() - start)+'sec')
 
-        self.model.save_model(self.param_file)
+        # self.model.save_model(self.param_file)
 
-        return self.model
+        # return self.model
 
 
     @classmethod
