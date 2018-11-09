@@ -12,27 +12,21 @@ from chainer import (Chain, Variable, cuda, iterators, optimizer, optimizers,
 from chainer.dataset import concat_examples
 from chainer.training import extensions
 
-from . import bpseq, evaluate, fasta
+from . import evaluate
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model import load_model
 from .model.mlp import MLP
 from .model.rnn import RNN
+from .seq import load_seq
 
 
 class Train:
     def __init__(self, args):
         # load sequences
-        if args.bpseq:
-            self.name_set, self.seq_set, self.structure_set = bpseq.load(args.train_file)
-        else:
-            self.name_set, self.seq_set, self.structure_set = fasta.load(args.train_file)
-
+        self.name_set, self.seq_set, self.structure_set = load_seq(args.train_file)
         if args.test_file:
-            if args.bpseq:
-                self.name_set_test, self.seq_set_test, self.structure_set_test = bpseq.load(args.test_file)
-            else:
-                self.name_set_test, self.seq_set_test, self.structure_set_test = fasta.load(args.test_file)
+            self.name_set_test, self.seq_set_test, self.structure_set_test = load_seq(args.test_file)
         else:
             self.seq_set_test = None
 

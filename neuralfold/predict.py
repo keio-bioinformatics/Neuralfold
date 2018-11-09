@@ -3,20 +3,17 @@ import pickle
 import numpy as np
 from chainer import serializers
 
-from . import bpseq, evaluate, fasta
+from . import evaluate
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model.mlp import MLP
 from .model import load_model
+from .seq import load_seq
 
 
 class Predict:
     def __init__(self, args):
-        if args.bpseq:
-            self.name_set, self.seq_set, self.structure_set = bpseq.load(args.seq_file)
-        else:
-            self.name_set, self.seq_set, self.structure_set = fasta.load(args.seq_file)
-
+        self.name_set, self.seq_set, self.structure_set = load_seq(args.seq_file)
         self.model = load_model(args.parameters)
 
         if args.ipknot:
