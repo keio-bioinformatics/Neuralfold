@@ -6,8 +6,8 @@ from chainer import serializers
 from . import evaluate
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
-from .model.mlp import MLP
 from .model import load_model
+from .model.mlp import MLP
 from .seq import load_seq
 
 
@@ -28,8 +28,8 @@ class Predict:
 
         for name, seq in zip(self.name_set, self.seq_set):
             print(name)
-            predicted_BP = self.model.compute_bpp(seq)
-            predicted_structure = self.decoder.decode(predicted_BP.data)
+            predicted_BP = self.model.compute_bpp([seq])
+            predicted_structure = self.decoder.decode(predicted_BP[0].array)
 
             print(seq)
             print(self.decoder.dot_parenthesis(seq, predicted_structure))

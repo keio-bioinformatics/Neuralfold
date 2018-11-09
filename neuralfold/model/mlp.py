@@ -58,7 +58,153 @@ class MLP(Chain):
         return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
 
+    def base_onehot(self, base):
+        if base in ['A' ,'a']:
+            return np.array([1,0,0,0,0] , dtype=np.float32)
+        elif base in ['U' ,'u']:
+            return np.array([0,1,0,0,0] , dtype=np.float32)
+        elif base in ['G' ,'g']:
+            return np.array([0,0,1,0,0] , dtype=np.float32)
+        elif base in ['C' ,'c']:
+            return np.array([0,0,0,1,0] , dtype=np.float32)
+        else:
+            return np.array([0,0,0,0,0] , dtype=np.float32)
+
+
+    def make_onehot_vector(self, seq):
+        B = len(seq) # batch size
+        M = 5 # the number of bases + 1
+        N = max([len(s) for s in seq]) # the maximum length of sequences
+        seq_vec = np.zeros((B, N, M), dtype=np.float32)
+        for k, s in enumerate(seq):
+            for i, base in enumerate(s):
+                seq_vec[k, i, :] = self.base_onehot(base)
+        return seq_vec
+
+
+    def make_context_vector(self, seq_vec):
+        B, N, M = seq_vec.shape # (batchsize, seqlen, bases)
+        W = self.neighbor # the width of context with bases
+        K = M*(2*W+1) # the width of both context with onehot
+        zero_vec = np.zeros((B, W, M), dtype=np.float32)
+        seq_vec = np.concatenate((zero_vec, seq_vec, zero_vec), axis=1)
+        ret = np.zeros((B, N, K), dtype=np.float32)
+        for i in range(N):
+            ret[:, i, :] = seq_vec[:, i:i+W*2+1, :].reshape(B, K)
+        return ret
+
+
+    def make_interval_vector(self, interval, bit_len, scale):
+        i = int(math.log(interval, scale)+1.)
+        return np.eye(bit_len, dtype=np.float32)[min(i, bit_len-1)]
+
+
+    def make_input_vector(self, v, interval, bit_len=20, scale=1.5):
+        B, N, K = v.shape
+        W = self.neighbor
+
+        v_l = v[:, :-interval, :] # (B, N-interval, K)
+        v_r = v[:, interval:, :]  # (B, N-interval, K)
+        v_int = self.make_interval_vector(interval, bit_len, scale) # (bit_len,)
+        v_int = np.tile(v_int, (B, N-interval, 1)) # (B, N-interval, bit_len)
+        x = np.concatenate((v_l, v_r, v_int), axis=2) # (B, N-interval, K*2+bit_len)
+        if interval < W:
+            l = W - interval
+            x[:, :, K-l*5:K+l*5] = np.tile([0, 0, 0, 0, 1], l*2).astype(np.float32)
+        return x
+
+    def make_input_vector_ij(self, v, i, j, bit_len=20, scale=1.5):
+        B, _, K = v.shape
+        W = self.neighbor
+        interval = j-i
+        v_int = self.make_interval_vector(interval, bit_len, scale) # (bit_len,)
+        v_int = np.tile(v_int, (B, 1)) # (B, bit_len)
+        x = np.concatenate((v[:, i, :], v[:, j, :], v_int), axis=1) # (B, K*2+bit_len)
+
+        if interval < W:
+            l = W - interval
+            x[:, K-l*5:K+l*5] = np.tile([0, 0, 0, 0, 1], l*2).astype(np.float32)
+        return x
+
+
+    def compute_bpp_1(self, seq):
+        seq_vec = self.make_onehot_vector(seq)
+        B, N, _ = seq_vec.shape
+        seq_vec = self.make_context_vector(seq_vec)
+
+        bpp = Variable(np.empty((B, 0, N), dtype=np.float32))
+        for i in range(N):
+            bpp_i = Variable(np.empty((B, 1, 0), dtype=np.float32))
+            for j in range(N):
+                if i<j:
+                    x = self.make_input_vector_ij(seq_vec, i, j)    
+                    y_ij = self(x).reshape(B, 1, 1)
+                else:  
+                    y_ij = Variable(np.zeros((B, 1, 1), dtype=np.float32))
+                bpp_i = F.concat((bpp_i, y_ij), axis=2)
+            bpp = F.concat((bpp, bpp_i), axis=1)
+        # print(bpp.shape) : (B, N, N)
+        return bpp
+
+
     def compute_bpp(self, seq):
+        seq_vec = self.make_onehot_vector(seq)
+        B, N, _ = seq_vec.shape
+        seq_vec = self.make_context_vector(seq_vec)
+
+        bpp_diag = Variable(np.empty((B, 0), dtype=np.float32)) # todo: to the device?
+        for k in range(1, N):
+            x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
+            # todo: x should be transfered to the device
+            y = self(x.reshape(B*(N-k),-1)).reshape(B, N-k)
+            bpp_diag = F.hstack((bpp_diag, y))
+        # bpp_diag: (B, N*(N-1)/2)
+
+        bpp_x = np.full((N, N), None, dtype=object)
+        l = 0
+        for k in range(1, N):
+            for i in range(N-k):
+                j = i + k
+                bpp_x[i, j] = bpp_diag[:, l]
+                l += 1
+
+        bpp = Variable(np.empty((B, 0, N), dtype=np.float32))
+        for i in range(N):
+            bpp_i = Variable(np.empty((B, 1, 0), dtype=np.float32))
+            for j in range(N):
+                if i<j:
+                    y_ij = bpp_x[i, j].reshape(B, 1, 1)
+                else:  
+                    y_ij = Variable(np.zeros((B, 1, 1), dtype=np.float32))
+                bpp_i = F.concat((bpp_i, y_ij), axis=2)
+            bpp = F.concat((bpp, bpp_i), axis=1)
+
+
+        # reshape to (B,N,N)
+        # diagmat = Variable(np.empty((B, 0, N), dtype=np.float32)) # todo: to the device?
+        # i = 0
+        # for k in range(1, N):
+        #     l = N-k    
+        #     x1 = bpp_diag[:, i:i+l].reshape(B, 1, l)
+        #     x2 = Variable(np.zeros((B, 1, k), dtype=np.float32)) # todo: to the device?
+        #     x = F.concat((x2, x1), axis=2) # (B, 1, N)
+        #     diagmat = F.concat((diagmat, x)) # (B, +1, N)
+        #     i += l
+        # x0 = Variable(np.zeros((B, 1, N), dtype=np.float32))
+        # diagmat = F.concat((diagmat, x0))
+        # # print(diagmat.shape) # (B, N, N)
+
+        # bpp = Variable(np.empty((B, N, 0), dtype=np.float32)) # todo :to the device?
+        # for i in range(N):
+        #     x = F.concat((diagmat[:, :i, i][::-1], diagmat[:, i:, i]), axis=1)
+        #     bpp = F.concat((bpp, x.reshape(B, N, 1)), axis=2)
+        # # print(bpp.shape) # (B, N, N)
+
+        return bpp
+
+
+    def compute_bpp_0(self, seq):
+        seq = seq[0]
         N = len(seq)
         base_length = 5
         neighbor = self.neighbor

@@ -45,6 +45,7 @@ class Train:
 
         # optimizer setup
         self.epochs = args.epochs
+        self.batchsize = args.batchsize
         self.optimizer = optimizers.Adam()
         self.optimizer.setup(self.model)
         if args.init_optimizers:
@@ -62,25 +63,25 @@ class Train:
 
 
     def calculate_loss(self, name_set, seq_set, true_structure_set):
-        loss = Variable(np.zeros((1,), dtype=np.float32))
-        for name, seq, true_structure in zip(name_set, seq_set, true_structure_set):
-            print(name, len(seq), 'bp')
-            predicted_BP = self.model.compute_bpp(seq)
-
-            margin = np.full_like(predicted_BP.array, self.neg_margin)
+        loss = 0
+        print(name_set)
+        predicted_BP = self.model.compute_bpp(seq_set)
+        for k, (name, seq, true_structure) in enumerate(zip(name_set, seq_set, true_structure_set)):
+            N = len(seq)
+            print(name, N, 'bp')
+            margin = np.full((N, N), self.neg_margin, dtype=np.float32)
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(predicted_BP.array, margin=margin)
-            predicted_score = self.decoder.calc_score(predicted_BP, pair=predicted_structure, margin=margin)
-            true_score = self.decoder.calc_score(predicted_BP, pair=true_structure)
+            predicted_structure = self.decoder.decode(predicted_BP[k].array, margin=margin)
+            predicted_score = self.decoder.calc_score(predicted_BP[k], pair=predicted_structure, margin=margin)
+            true_score = self.decoder.calc_score(predicted_BP[k], pair=true_structure)
             loss += predicted_score - true_score
 
         return loss
 
 
     def run(self):
-        self.batchsize = 1
         training_data = list(zip(self.name_set, self.seq_set, self.structure_set))
         train_iter = iterators.SerialIterator(training_data, self.batchsize)
 
@@ -175,6 +176,8 @@ class Train:
         parser_training.add_argument('-o','--optimizers', help = 'Optimizer state file',
                                     type=str, default="state.npz")
         parser_training.add_argument('-i','--epochs', help = 'the number of epochs',
+                                    type=int, default=1)
+        parser_training.add_argument('--batchsize', help='batch size', 
                                     type=int, default=1)
 
         # neural networks architecture
