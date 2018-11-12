@@ -152,53 +152,19 @@ class MLP(Chain):
         B, N, _ = seq_vec.shape
         seq_vec = self.make_context_vector(seq_vec)
 
-        bpp_diag = Variable(np.empty((B, 0), dtype=np.float32)) # todo: to the device?
+        bpp = [ 
+            [ Variable(np.zeros((B, 1, 1), dtype=np.float32)) for _ in range(N) ] for _ in range(N)
+        ]
         for k in range(1, N):
             x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
             # todo: x should be transfered to the device
-            y = self(x.reshape(B*(N-k),-1)).reshape(B, N-k)
-            bpp_diag = F.hstack((bpp_diag, y))
-        # bpp_diag: (B, N*(N-1)/2)
-
-        bpp_x = np.full((N, N), None, dtype=object)
-        l = 0
-        for k in range(1, N):
+            y = self(x.reshape(B*(N-k), -1)).reshape(B, N-k)
             for i in range(N-k):
                 j = i + k
-                bpp_x[i, j] = bpp_diag[:, l]
-                l += 1
+                bpp[i][j] = y[:, i].reshape(-1, 1, 1)
 
-        bpp = Variable(np.empty((B, 0, N), dtype=np.float32))
-        for i in range(N):
-            bpp_i = Variable(np.empty((B, 1, 0), dtype=np.float32))
-            for j in range(N):
-                if i<j:
-                    y_ij = bpp_x[i, j].reshape(B, 1, 1)
-                else:  
-                    y_ij = Variable(np.zeros((B, 1, 1), dtype=np.float32))
-                bpp_i = F.concat((bpp_i, y_ij), axis=2)
-            bpp = F.concat((bpp, bpp_i), axis=1)
-
-
-        # reshape to (B,N,N)
-        # diagmat = Variable(np.empty((B, 0, N), dtype=np.float32)) # todo: to the device?
-        # i = 0
-        # for k in range(1, N):
-        #     l = N-k    
-        #     x1 = bpp_diag[:, i:i+l].reshape(B, 1, l)
-        #     x2 = Variable(np.zeros((B, 1, k), dtype=np.float32)) # todo: to the device?
-        #     x = F.concat((x2, x1), axis=2) # (B, 1, N)
-        #     diagmat = F.concat((diagmat, x)) # (B, +1, N)
-        #     i += l
-        # x0 = Variable(np.zeros((B, 1, N), dtype=np.float32))
-        # diagmat = F.concat((diagmat, x0))
-        # # print(diagmat.shape) # (B, N, N)
-
-        # bpp = Variable(np.empty((B, N, 0), dtype=np.float32)) # todo :to the device?
-        # for i in range(N):
-        #     x = F.concat((diagmat[:, :i, i][::-1], diagmat[:, i:, i]), axis=1)
-        #     bpp = F.concat((bpp, x.reshape(B, N, 1)), axis=2)
-        # # print(bpp.shape) # (B, N, N)
+        bpp = [ F.concat(bpp_i, axis=2) for bpp_i in bpp ]
+        bpp = F.concat(bpp, axis=1)
 
         return bpp
 
