@@ -40,6 +40,8 @@ class Train:
             try:
                 klass = globals()[args.learning_model]
                 self.model = klass(**klass.parse_args(args))
+                if args.gpu >= 0:
+                    self.model.to_gpu(args.gpu)
             except KeyError:
                 raise RuntimeError("{} is unknown model class.".format(args.learning_model))
 
@@ -73,7 +75,7 @@ class Train:
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(predicted_BP[k].array, margin=margin)
+            predicted_structure = self.decoder.decode(predicted_BP[k].array[0:N, 0:N], margin=margin)
             predicted_score = self.decoder.calc_score(predicted_BP[k], pair=predicted_structure, margin=margin)
             true_score = self.decoder.calc_score(predicted_BP[k], pair=true_structure)
             loss += predicted_score - true_score
@@ -157,6 +159,8 @@ class Train:
     def add_args(cls, parser):
         import argparse
         parser_training = parser.add_parser('train', help='training RNA secondary structures')
+        parser_training.add_argument('--gpu', help='set GPU ID (-1 for CPU)',
+                                    type=int, default=-1)
 
         # data
         parser_training.add_argument('train_file', help = 'FASTA or BPseq file for training', nargs='+',

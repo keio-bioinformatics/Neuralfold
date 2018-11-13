@@ -1,5 +1,6 @@
 import pickle
 
+import chainer
 import numpy as np
 from chainer import serializers
 
@@ -15,6 +16,8 @@ class Predict:
     def __init__(self, args):
         self.name_set, self.seq_set, self.structure_set = load_seq(args.seq_file)
         self.model = load_model(args.parameters)
+        if args.gpu >= 0:
+            self.model.to_gpu(args.gpu)
 
         if args.ipknot:
             gamma = args.gamma if args.gamma is not None else (3.0, 3.0)
@@ -27,9 +30,11 @@ class Predict:
         predicted_structure_set = []
 
         for name, seq in zip(self.name_set, self.seq_set):
+            N = len(seq)
             print(name)
-            predicted_BP = self.model.compute_bpp([seq])
-            predicted_structure = self.decoder.decode(predicted_BP[0].array)
+            with chainer.using_config('train', False), chainer.using_config('enable_backprop', False):
+                predicted_BP = self.model.compute_bpp([seq])
+            predicted_structure = self.decoder.decode(predicted_BP[0].array[0:N, 0:N])
 
             print(seq)
             print(self.decoder.dot_parenthesis(seq, predicted_structure))
@@ -48,6 +53,9 @@ class Predict:
         import argparse
         # add subparser for test
         parser_pred = parser.add_parser('predict', help='Predict RNA secondary structures for given sequences')
+        parser_pred.add_argument('--gpu', help='set GPU ID (-1 for CPU)',
+                                type=int, default=-1)
+
         parser_pred.add_argument('seq_file',
                                 help = 'FASTA or BPseq file for prediction',
                                 nargs='+',

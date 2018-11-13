@@ -42,14 +42,14 @@ class MLP(Chain):
     def add_args(cls, parser):
         group = parser.add_argument_group('Options for MLP model')
         group.add_argument('-hn1','--hidden1',
-                           help = 'hidden layer nodes for neighbor model',
-                           type=int, default=200)
+                        help = 'hidden layer nodes for neighbor model',
+                        type=int, default=200)
         group.add_argument('-hn2','--hidden2',
-                           help = 'hidden layer nodes2 for neighbor model',
-                           type=int, default=50)
+                        help = 'hidden layer nodes2 for neighbor model',
+                        type=int, default=50)
         group.add_argument('-n','--neighbor',
-                           help = 'length of neighbor bases to see',
-                           type=int, default=40)
+                        help = 'length of neighbor bases to see',
+                        type=int, default=40)
 
 
     @classmethod    
@@ -153,12 +153,13 @@ class MLP(Chain):
         seq_vec = self.make_context_vector(seq_vec)
 
         bpp = [ 
-            [ Variable(np.zeros((B, 1, 1), dtype=np.float32)) for _ in range(N) ] for _ in range(N)
+            [ Variable(self.xp.zeros((B, 1, 1), dtype=np.float32)) for _ in range(N) ] for _ in range(N)
         ]
         for k in range(1, N):
             x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
-            # todo: x should be transfered to the device
-            y = self(x.reshape(B*(N-k), -1)).reshape(B, N-k)
+            x = x.reshape(B*(N-k), -1)
+            x = self.xp.asarray(x)
+            y = self(x).reshape(B, N-k)
             for i in range(N-k):
                 j = i + k
                 bpp[i][j] = y[:, i].reshape(-1, 1, 1)
