@@ -11,6 +11,7 @@ from chainer import (Chain, Variable, cuda, iterators, optimizer, optimizers,
                      serializers, training)
 from chainer.dataset import concat_examples
 from chainer.training import extensions
+from chainer.cuda import to_cpu
 
 from . import evaluate
 from .decode.ipknot import IPknot
@@ -75,7 +76,7 @@ class Train:
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(predicted_BP[k].array[0:N, 0:N], margin=margin)
+            predicted_structure = self.decoder.decode(to_cpu(predicted_BP[k].array[0:N, 0:N]), margin=margin)
             predicted_score = self.decoder.calc_score(predicted_BP[k], pair=predicted_structure, margin=margin)
             true_score = self.decoder.calc_score(predicted_BP[k], pair=true_structure)
             loss += predicted_score - true_score

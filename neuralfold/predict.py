@@ -3,6 +3,7 @@ import pickle
 import chainer
 import numpy as np
 from chainer import serializers
+from chainer.cuda import to_cpu
 
 from . import evaluate
 from .decode.ipknot import IPknot
@@ -34,7 +35,7 @@ class Predict:
             print(name)
             with chainer.using_config('train', False), chainer.using_config('enable_backprop', False):
                 predicted_BP = self.model.compute_bpp([seq])
-            predicted_structure = self.decoder.decode(predicted_BP[0].array[0:N, 0:N])
+            predicted_structure = self.decoder.decode(to_cpu(predicted_BP[0].array[0:N, 0:N]))
 
             print(seq)
             print(self.decoder.dot_parenthesis(seq, predicted_structure))
