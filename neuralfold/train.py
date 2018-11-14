@@ -9,9 +9,9 @@ import chainer.links as L
 import numpy as np
 from chainer import (Chain, Variable, cuda, iterators, optimizer, optimizers,
                      serializers, training)
+from chainer.cuda import to_cpu
 from chainer.dataset import concat_examples
 from chainer.training import extensions
-from chainer.cuda import to_cpu
 
 from . import evaluate
 from .decode.ipknot import IPknot
@@ -20,6 +20,7 @@ from .model import load_model
 from .model.mlp import MLP
 from .model.rnn import RNN
 from .seq import load_seq
+from .structured_loss import StructuredLoss
 
 
 class Train:
@@ -33,6 +34,12 @@ class Train:
 
         # output
         self.param_file = args.parameters        
+        self.outdir = args.trainer_output
+
+        # training parameters
+        self.epochs = args.epochs
+        self.batchsize = args.batchsize
+        self.resume = args.resume
 
         # model setup
         if args.init_parameters:
@@ -46,54 +53,33 @@ class Train:
             except KeyError:
                 raise RuntimeError("{} is unknown model class.".format(args.learning_model))
 
-        # optimizer setup
-        self.epochs = args.epochs
-        self.batchsize = args.batchsize
-        self.optimizer = optimizers.Adam()
-        self.optimizer.setup(self.model)
-        if args.init_optimizers:
-            serializers.load_npz(args.init_optimizers, self.optimizer)
-
         # decoder setup
-        self.pos_margin = args.positive_margin
-        self.neg_margin = args.negative_margin
+        pos_margin = args.positive_margin
+        neg_margin = args.negative_margin
         if args.ipknot:
             gamma = args.gamma if args.gamma is not None else (3.0, 3.0)
-            self.decoder = IPknot(gamma)
+            decoder = IPknot(gamma)
         else:
             gamma = args.gamma if args.gamma is not None else 3.0
-            self.decoder = Nussinov(gamma)
+            decoder = Nussinov(gamma)
 
-
-    def calculate_loss(self, name_set, seq_set, true_structure_set):
-        loss = 0
-        print(name_set)
-        predicted_BP = self.model.compute_bpp(seq_set)
-        for k, (name, seq, true_structure) in enumerate(zip(name_set, seq_set, true_structure_set)):
-            N = len(seq)
-            print(name, N, 'bp')
-            margin = np.full((N, N), self.neg_margin, dtype=np.float32)
-            for i, j in true_structure:
-                margin[i, j] -= self.pos_margin + self.neg_margin
-
-            predicted_structure = self.decoder.decode(to_cpu(predicted_BP[k].array[0:N, 0:N]), margin=margin)
-            predicted_score = self.decoder.calc_score(predicted_BP[k], pair=predicted_structure, margin=margin)
-            true_score = self.decoder.calc_score(predicted_BP[k], pair=true_structure)
-            loss += predicted_score - true_score
-
-        return loss
+        # loss function
+        self.net = StructuredLoss(self.model, decoder, pos_margin, neg_margin)
 
 
     def run(self):
         training_data = list(zip(self.name_set, self.seq_set, self.structure_set))
         train_iter = iterators.SerialIterator(training_data, self.batchsize)
-
-        updater = training.StandardUpdater(train_iter, self.optimizer, 
-            converter=lambda batch, device: tuple(zip(*batch)),
-            loss_func=self.calculate_loss)
-        trainer = training.Trainer(updater, (self.epochs, 'epoch'), out='res')
+        optimizer = optimizers.Adam()
+        optimizer.setup(self.net)
+        updater = training.StandardUpdater(train_iter, optimizer, 
+            converter=lambda batch, _: tuple(zip(*batch)) )
+        trainer = training.Trainer(updater, (self.epochs, 'epoch'), out=self.outdir)
         trainer.extend(extensions.LogReport())
-        #trainer.extend(extensions.snapshot(filename='snapshot_epoch-{.updater.epoch}'))
+        trainer.extend(extensions.snapshot(filename='snapshot_epoch-{.updater.epoch}'))
+
+        if self.resume:
+            serializers.load_npz(self.resume, trainer)
         trainer.run()
 
         self.model.save_model(self.param_file)
@@ -176,10 +162,12 @@ class Train:
                                     type=str)
         parser_training.add_argument('-p','--parameters', help = 'Output parameter file',
                                     type=str, default="NEURALfold_parameters")
-        parser_training.add_argument('--init-optimizers', help = 'Initial optimizer state file',
-                                    type=str)
-        parser_training.add_argument('-o','--optimizers', help = 'Optimizer state file',
-                                    type=str, default="state.npz")
+        parser_training.add_argument('-o', '--trainer-output', help='Trainer output directory',
+                                    type=str, default='out')
+        parser_training.add_argument('--resume', help='resume from snapshot',
+                                    type=str, default='')
+
+        # training parameters
         parser_training.add_argument('-i','--epochs', help = 'the number of epochs',
                                     type=int, default=1)
         parser_training.add_argument('--batchsize', help='batch size', 
@@ -203,9 +191,6 @@ class Train:
         parser_training.add_argument('--negative-margin',
                                     help = 'margin for negatives',
                                     type=float, default=0.2)
-        # parser_training.add_argument('-fu','--fully_learn',
-        #                             help = 'calculate loss for all canonical pair',
-        #                             action = 'store_true')
         parser_training.add_argument('-ip','--ipknot',
                                     help = 'predict pseudoknotted secaondary structure',
                                     action = 'store_true')
