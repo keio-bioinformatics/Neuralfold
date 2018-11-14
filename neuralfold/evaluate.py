@@ -17,8 +17,8 @@ def get_score(ref_set, pred_set, global_average=True):
         return tp, fp, fn
 
     def calc(tp, fp, fn):
-        sen = tp / (tp + fn)
-        ppv = tp / (tp + fp)
+        sen = tp / (tp + fn) if tp + fn != 0 else 0
+        ppv = tp / (tp + fp) if tp + fn != 0 else 0
         f_val = 2 * (sen * ppv) / (sen + ppv) if sen + ppv > 0.0 else 0.
         return sen, ppv, f_val
 
