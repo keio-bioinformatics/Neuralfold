@@ -8,7 +8,8 @@ from . import Decoder
 class IPknot(Decoder):
     def __init__(self, gamma=None):
         self.gamma = gamma
-    
+
+
     def decode(self, bpp, gamma=None, margin=None, allowed_bp=None, disable_th=False):
         '''IPknot-style decoding algorithm    
         '''
@@ -16,16 +17,16 @@ class IPknot(Decoder):
         prob = pulp.LpProblem("IPknot", pulp.LpMaximize)
         seqlen = len(bpp)
         nlevels = len(gamma)
-        bpp = bpp.data if type(bpp) is Variable else bpp
+        bpp = bpp.data if isinstance(bpp, Variable) else bpp
 
         if allowed_bp is None:
             allowed_bp = np.ones(bpp.shape, dtype=np.bool)
-        elif type(allowed_bp) is list:
+        elif isinstance(allowed_bp, list):
             a = np.zeros(bpp.shape, dtype=np.bool)
             for l, r in allowed_bp:
                 a[l, r] = a[r, l] = True
             allowed_bp = a
-        assert type(allowed_bp) is np.ndarray
+        assert isinstance(allowed_bp, np.ndarray)
         assert allowed_bp.shape == bpp.shape
 
         # accelerate by 'at most gamma+1' candidates for each base
@@ -42,6 +43,7 @@ class IPknot(Decoder):
 
         # variables and objective function
         x = [[[None for i in range(seqlen)] for j in range(seqlen)] for k in range(nlevels)]
+        x_j = [[[] for j in range(seqlen)] for k in range(nlevels)]
         obj = []
         th = 0 if disable_th else 1
         for k in range(nlevels):
@@ -54,6 +56,7 @@ class IPknot(Decoder):
                                 s += margin[i, j]
                             x[k][i][j] = x[k][j][i] = pulp.LpVariable('x[%d][%d][%d]' % (k, i, j), 0, 1, 'Binary')
                             obj.append(s * x[k][i][j])
+                            x_j[k][j].append(i)
         prob += pulp.lpSum(obj)
 
         # constraints 1
@@ -62,37 +65,40 @@ class IPknot(Decoder):
 
         # constraints 2
         for k in range(nlevels):
+            x_kj = x_j[k]
             for j2 in range(seqlen):
                 for j1 in range(j2):
-                    for i2 in range(j1):
-                        if x[k][i2][j2] is not None:
-                            for i1 in range(i2):
-                                if x[k][i1][j1] is not None:
+                    for i2 in x_kj[j2]:
+                        assert x[k][i2][j2] is not None
+                        if i2 < j1:
+                            for i1 in x_kj[j1]:
+                                if i1 < i2:
+                                    assert x[k][i1][j1] is not None
                                     prob += pulp.lpSum(x[k][i1][j1] + x[k][i2][j2]) <= 1
 
         # constraints 3
         for k2 in range(nlevels):
             for j2 in range(seqlen):
-                for i2 in range(j2):
-                    if x[k2][i2][j2] is not None:
-                        for k1 in range(k2):
-                            # o = 0
-                            c1 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(i2-1) if x[k1][j1][j1] is not None]
-                            c2 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(j2+1, seqlen) if x[k1][i1][j1] is not None]
-                            prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
+                for i2 in x_j[k2][j2]:
+                    assert x[k2][i2][j2] is not None
+                    for k1 in range(k2):
+                        c1 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(i2-1) if x[k1][j1][j1] is not None]
+                        c2 = [x[k1][i1][j1] for i1 in range(i2+1, j2) for j1 in range(j2+1, seqlen) if x[k1][i1][j1] is not None]
+                        prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
 
         # solve the IP problem
-        # start_ip = time()
         prob.solve()
 
         pair = [ [] for _ in range(nlevels) ]
         for k in range(nlevels):
             for j in range(seqlen):
-                for i in range(j):
-                    if x[k][i][j] is not None and x[k][i][j].value() > 0.5:
+                for i in x_j[k][j]:
+                    assert x[k][i][j] is not None
+                    if x[k][i][j].value() > 0.5:
                         pair[k].append((i,j))
         return pair
-    
+
+
     def calc_score(self, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)

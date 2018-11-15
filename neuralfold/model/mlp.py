@@ -148,104 +148,29 @@ class MLP(Chain):
 
 
     def compute_bpp(self, seq):
+        xp = self.xp
         seq_vec = self.make_onehot_vector(seq)
         B, N, _ = seq_vec.shape
         seq_vec = self.make_context_vector(seq_vec)
 
-        bpp = [ 
-            [ Variable(self.xp.zeros((B, 1, 1), dtype=np.float32)) for _ in range(N) ] for _ in range(N)
-        ]
+        bpp_d = Variable(xp.empty((B, 0, N), dtype=np.float32))
         for k in range(1, N):
             x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
             x = x.reshape(B*(N-k), -1)
-            x = self.xp.asarray(x)
-            y = self(x).reshape(B, N-k)
-            for i in range(N-k):
-                j = i + k
-                bpp[i][j] = y[:, i].reshape(-1, 1, 1)
+            x = xp.asarray(x)
+            y = self(x).reshape(B, 1, N-k)
 
-        bpp = [ F.concat(bpp_i, axis=2) for bpp_i in bpp ]
-        bpp = F.concat(bpp, axis=1)
+            bpp_i = Variable(xp.zeros((B, 1, k), dtype=np.float32))
+            bpp_i = F.concat((bpp_i, y), axis=2) # (B, 1, N)
+            bpp_d = F.concat((bpp_d, bpp_i), axis=1)
+        bpp_i = Variable(xp.zeros((B, 1, N), dtype=np.float32))
+        bpp_d = F.concat((bpp_d, bpp_i), axis=1)
 
-        return bpp
-
-
-    def compute_bpp_0(self, seq):
-        seq = seq[0]
-        N = len(seq)
-        base_length = 5
-        neighbor = self.neighbor
-        sequence_vector = np.empty((0, base_length), dtype=np.float32)
-        for base in seq:
-            sequence_vector = np.vstack((sequence_vector, base_represent(base)))
-        sequence_vector = Variable(sequence_vector)
-        # sequence_vector.shape: (N, base_length)
-
-        # Fill the side with 0 vectors
-        sequence_vector_neighbor = sequence_vector.reshape(N, base_length) # ??
-        sequence_vector_neighbor = F.vstack((sequence_vector_neighbor, Variable(np.zeros((neighbor, base_length), dtype=np.float32)) ))
-        sequence_vector_neighbor = F.vstack((Variable(np.zeros((neighbor, base_length), dtype=np.float32)) , sequence_vector_neighbor))
-        # sequence_vector_neighbor.shape: (N+neighbor*2, base_length)
-
-        # Create vectors around each base
-        side_input_size =  base_length * (neighbor * 2 + 1)
-        side_input_vector = Variable(np.empty((0, side_input_size), dtype=np.float32))
-        for base in range(0, N):
-            side_input_vector = F.vstack((side_input_vector, sequence_vector_neighbor[base:base+(neighbor * 2 + 1)].reshape(1,side_input_size)))
-        # side_input_vector.shape: (N, side_input_size=base_length*(neighbor*2+1))
-
-        # initiate BPP table
-        BP = Variable(np.zeros((N, 1, 1), dtype=np.float32))
-
-        # predict BPP
-        for interval in range(1, N):
-            left = side_input_vector[0 : N - interval]
-            right = side_input_vector[interval : N]
-            x = F.hstack((left, right))
-            # x.shape: (N-interval, 2*side_input_size)
-
-            # If there is an overlap, fill that portion with a specific vector
-            if interval <= neighbor:
-                row = N-interval
-                column = (neighbor-interval+1)*2*base_length
-                a = int(column/base_length)
-                surplus = Variable(np.array(([0,0,0,0,1] * row * a), dtype=np.float32))
-                surplus = surplus.reshape(row, column)
-                x[0:row,side_input_size-int(column/2)+1:side_input_size+int(column/2)+1].data = surplus.data
-
-            # add location information
-            direct = False
-            onehot = True
-            if direct:
-                left_location = Variable(np.arange(1, N - interval+1, dtype=np.float32).reshape(N - interval,1))/10
-                right_location = Variable(np.arange(interval+1, N+1, dtype=np.float32).reshape(N - interval,1))/10
-                full_length = Variable(np.full(N - interval, N, dtype=np.float32).reshape(N - interval,1))/10
-                x = F.hstack((x, left_location, right_location, full_length))
-            elif onehot:
-                # left_location = Variable(np.eye(80)[np.ceil(np.arange(1, N - interval+1, dtype=np.float32)/10).astype(np.int8)].astype(np.float32))
-                # right_location = Variable(np.eye(80)[np.ceil(np.arange(interval+1, N+1, dtype=np.float32)/10).astype(np.int8)].astype(np.float32))
-                # full_length = Variable(np.eye(80)[np.ceil(np.full(N - interval, N, dtype=np.float32)/10).astype(np.int8)].astype(np.float32))
-                interval_length = Variable(np.eye(20)[np.ceil(np.full(N - interval, math.log(interval,1.5), dtype=np.float32)).astype(np.int8)].astype(np.float32))
-                # x = F.hstack((x, left_location, right_location, full_length))
-                x = F.hstack((x, interval_length))
-                # x.shape(N-interval, 2*side_input_size+20)
-
-            BP = F.vstack((BP, self(x).reshape(N - interval,1,1)))
-
-        # reshape to (N,N)
-        BP = F.flatten(BP)
-        diagmat = Variable(np.empty((0, N), dtype=np.float32))
-        i = 0
-        for l in range(N, 0, -1):
-            x1 = BP[i:i+l].reshape(1, l)
-            x2 = np.zeros((1, N-l), dtype=np.float32)
-            x = F.hstack((x2, x1))
-            diagmat = F.vstack((diagmat, x))
-            i += l
-
-        bpp = Variable(np.empty((N, 0), dtype=np.float32))
-        for i in range(N):
-            x = F.hstack((diagmat[:i+1, i][::-1], diagmat[i+1:, i]))
-            bpp = F.hstack((bpp, x.reshape(N, 1)))
+        bpp = Variable(xp.empty((B, 0, N), dtype=np.float32))
+        for k in range(0, N):
+            d_k = F.diagonal(bpp_d, axis1=1, axis2=2, offset=k).reshape((B, 1, N-k))
+            bpp_i = Variable(xp.zeros((B, 1, k), dtype=np.float32))
+            bpp_i = F.concat((bpp_i, d_k), axis=2)
+            bpp = F.concat((bpp, bpp_i), axis=1)
 
         return bpp

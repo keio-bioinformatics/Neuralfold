@@ -12,21 +12,21 @@ class Nussinov(Decoder):
         '''Nussinov-style decoding algorithm    
         '''
         gamma = self.gamma if gamma is None else gamma
-        seqlen = len(bpp)
+        N = len(bpp)
         bpp = bpp.data if type(bpp) is Variable else bpp
         if self.use_simple_dp:
             _, tr = self.build_dp(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
         else:
             _, tr = self.build_dp_v(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
-        pair = self.traceback(tr, 0, seqlen-1, [])
+        pair = self.traceback(tr, 0, N-1, [])
         return pair
 
     def build_dp(self, bpp, gamma, margin=None, allowed_bp=None):
-        seqlen = len(bpp)
+        N = len(bpp)
         dp = np.zeros(bpp.shape, dtype=np.float32)
         tr = np.zeros(bpp.shape, dtype=np.int)
 
-        for j in range(seqlen):
+        for j in range(N):
             for i in reversed(range(j)):
                 s = (gamma + 1) *  bpp[i, j] - 1
                 if margin is not None:
@@ -47,26 +47,27 @@ class Nussinov(Decoder):
         
         return dp, tr
 
+    #@profile
     def build_dp_v(self, bpp, gamma, margin=None, allowed_bp=None):
-        seqlen = len(bpp)
-        dp = np.zeros(bpp.shape, dtype=np.float32)
-        dp_diag_i = np.zeros(bpp.shape, dtype=np.float32)
-        dp_diag_j = np.zeros(bpp.shape, dtype=np.float32)
-        tr = np.zeros(bpp.shape, dtype=np.int)
+        N = len(bpp)
+        dp = np.zeros_like(bpp)
+        dp_diag_i = np.zeros_like(bpp)
+        dp_diag_j = np.zeros_like(bpp)
+        tr = np.zeros_like(bpp, dtype=np.int)
         s = (gamma + 1) * bpp - 1
         if margin is not None:
             s += margin
 
-        for k in range(1, seqlen):
+        for k in range(1, N):
             dp_diag_1 = np.diag(dp, k=k-1)
-            v_1 = dp_diag_1[1:].reshape((seqlen-k, 1))
-            v_2 = dp_diag_1[:-1].reshape((seqlen-k, 1))
+            v_1 = dp_diag_1[1:].reshape((N-k, 1))
+            v_2 = dp_diag_1[:-1].reshape((N-k, 1))
             if k >= 2:
                 dp_diag_2 = np.diag(dp, k=k-2)
                 v_3 = dp_diag_2[1:-1] + np.diag(s, k=k)
-                v_3 = v_3.reshape((seqlen-k), 1)
+                v_3 = v_3.reshape((N-k), 1)
             else:
-                v_3 = np.zeros((seqlen-k,1), dtype=np.float32)
+                v_3 = np.zeros((N-k,1), dtype=bpp.dtype)
             v_k = dp_diag_i[:-k, :k] + dp_diag_j[k:, :k][:, ::-1]
 
             v = np.hstack((v_1, v_2, v_3, v_k))
