@@ -6,8 +6,9 @@ from . import Decoder
 
 
 class IPknot(Decoder):
-    def __init__(self, gamma=None):
+    def __init__(self, gamma=None, stacking=True):
         self.gamma = gamma
+        self.stacking = stacking
 
 
     def decode(self, bpp, gamma=None, margin=None, allowed_bp=None, disable_th=False):
@@ -86,6 +87,26 @@ class IPknot(Decoder):
                         c1 = [x[k1][i1][j1] for j1 in x_j[k1][i1] for i1 in range(0, i2-1) if i2 < j1 and j1 < j2]
                         c2 = [x[k1][i1][j1] for i1 in x_i[k1][j1] for j1 in range(j2+1, N) if i2 < i1 and i1 < j2]
                         prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
+
+        # constraints 4: stacking
+        if self.stacking:
+            for k in range(K):
+                x_up = [ None ] * N
+                x_do = [ None ] * N
+                for i in range(N):
+                    x_up[i] = pulp.lpSum([ x[k][j][i] for j in x_i[k][i] ])
+                    x_do[i] = pulp.lpSum([ x[k][i][j] for j in x_j[k][i] ])
+                for i in range(N):
+                    c_up = [-x_up[i]]
+                    c_do = [-x_do[i]]
+                    if i>0:
+                        c_up.append(x_up[i-1])
+                        c_do.append(x_do[i-1])
+                    if i+1<N:
+                        c_up.append(x_up[i+1])
+                        c_do.append(x_do[i+1])
+                    prob += pulp.lpSum(c_up) >= 0
+                    prob += pulp.lpSum(c_do) >= 0
 
         # solve the IP problem
         prob.solve()
