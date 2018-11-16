@@ -8,23 +8,25 @@ class Nussinov(Decoder):
         self.gamma = gamma
         self.use_simple_dp = use_simple_dp
 
-    def decode(self, bpp, gamma=None, margin=None, allowed_bp=None):
+    def decode(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical'):
         '''Nussinov-style decoding algorithm    
         '''
         gamma = self.gamma if gamma is None else gamma
         N = len(bpp)
         bpp = bpp.data if type(bpp) is Variable else bpp
         if self.use_simple_dp:
-            _, tr = self.build_dp(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
+            _, tr = self.build_dp(seq, bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
         else:
-            _, tr = self.build_dp_v(bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
+            _, tr = self.build_dp_v(seq, bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
         pair = self.traceback(tr, 0, N-1, [])
         return pair
 
-    def build_dp(self, bpp, gamma, margin=None, allowed_bp=None):
-        N = len(bpp)
+    def build_dp(self, seq, bpp, gamma, margin=None, allowed_bp=None):
+        N = len(seq)
         dp = np.zeros(bpp.shape, dtype=np.float32)
         tr = np.zeros(bpp.shape, dtype=np.int)
+
+        allowed_bp = self.allowed_basepairs(seq, allowed_bp)
 
         for j in range(N):
             for i in reversed(range(j)):
@@ -37,7 +39,7 @@ class Nussinov(Decoder):
                 if i < j-1 and dp[i, j] < dp[i, j-1]:
                     dp[i, j] = dp[i, j-1]
                     tr[i, j] = 2
-                if i+1 < j-1 and dp[i, j] < dp[i+1, j-1] + s:
+                if i+1 < j-1 and allowed_bp[i, j] and dp[i, j] < dp[i+1, j-1] + s:
                     dp[i, j] = dp[i+1, j-1] + s
                     tr[i, j] = 3
                 for k in range(i+1, j):
@@ -47,13 +49,14 @@ class Nussinov(Decoder):
         
         return dp, tr
 
-    #@profile
-    def build_dp_v(self, bpp, gamma, margin=None, allowed_bp=None):
-        N = len(bpp)
+
+    def build_dp_v(self, seq, bpp, gamma, margin=None, allowed_bp=None):
+        N = len(seq)
         dp = np.zeros_like(bpp)
         dp_diag_i = np.zeros_like(bpp)
         dp_diag_j = np.zeros_like(bpp)
         tr = np.zeros_like(bpp, dtype=np.int)
+        allowed_bp = self.allowed_basepairs(seq, allowed_bp)
         s = (gamma + 1) * bpp - 1
         if margin is not None:
             s += margin
@@ -65,9 +68,10 @@ class Nussinov(Decoder):
             if k >= 2:
                 dp_diag_2 = np.diag(dp, k=k-2)
                 v_3 = dp_diag_2[1:-1] + np.diag(s, k=k)
+                v_3[np.diag(allowed_bp, k=k)==False] = -1e10
                 v_3 = v_3.reshape((N-k), 1)
             else:
-                v_3 = np.zeros((N-k,1), dtype=bpp.dtype)
+                v_3 = np.full((N-k,1), -1e10, dtype=bpp.dtype)
             v_k = dp_diag_i[:-k, :k] + dp_diag_j[k:, :k][:, ::-1]
 
             v = np.hstack((v_1, v_2, v_3, v_k))
@@ -80,6 +84,7 @@ class Nussinov(Decoder):
             dp_diag_j[k:, k] = dp_diag
 
         return dp, tr
+
 
     def traceback(self, tr, i, j, pair):
         if i < j:
@@ -96,7 +101,7 @@ class Nussinov(Decoder):
                 pair = self.traceback(tr, k+1, j, pair)
         return pair
 
-    def calc_score(self, bpp, pair, gamma=None, margin=None):
+    def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)
         if type(bpp) is Variable:
@@ -133,5 +138,5 @@ if __name__ == '__main__':
         print(">"+fa['name'])
         print(fa['seq'])
         bpp = np.array(rna.bpp())
-        pred = nussinov.decode(bpp[1:, 1:])
+        pred = nussinov.decode(fa['seq'], bpp[1:, 1:])
         print(nussinov.dot_parenthesis(fa['seq'], pred))

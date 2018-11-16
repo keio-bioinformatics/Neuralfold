@@ -31,9 +31,9 @@ class StructuredLoss(chainer.Chain):
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(to_cpu(predicted_BP[k].array[0:N, 0:N]), margin=margin)
-            predicted_score = self.decoder.calc_score(predicted_BP[k], pair=predicted_structure, margin=margin)
-            true_score = self.decoder.calc_score(predicted_BP[k], pair=true_structure)
+            predicted_structure = self.decoder.decode(seq, to_cpu(predicted_BP[k].array[0:N, 0:N]), margin=margin)
+            predicted_score = self.decoder.calc_score(seq, predicted_BP[k], pair=predicted_structure, margin=margin)
+            true_score = self.decoder.calc_score(seq, predicted_BP[k], pair=true_structure)
             loss += predicted_score - true_score
 
             if self.compute_accuracy:

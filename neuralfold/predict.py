@@ -24,7 +24,7 @@ class Predict:
             gamma = args.gamma if args.gamma is not None else (3.0, 3.0)
             self.decoder = IPknot(gamma)
         else:
-            gamma = args.gamma if args.gamma is not None else 3.0
+            gamma = args.gamma[-1] if args.gamma is not None else 3.0
             self.decoder = Nussinov(gamma)
 
     def run(self):
@@ -35,7 +35,7 @@ class Predict:
             print(name)
             with chainer.using_config('train', False), chainer.using_config('enable_backprop', False):
                 predicted_BP = self.model.compute_bpp([seq])
-            predicted_structure = self.decoder.decode(to_cpu(predicted_BP[0].array[0:N, 0:N]))
+            predicted_structure = self.decoder.decode(seq, to_cpu(predicted_BP[0].array[0:N, 0:N]))
 
             print(seq)
             print(self.decoder.dot_parenthesis(seq, predicted_structure))

@@ -9,9 +9,9 @@ import chainer.links as L
 import numpy as np
 from chainer import (Chain, Variable, cuda, iterators, optimizer, optimizers,
                      serializers, training)
-from chainer.cuda import to_cpu
 from chainer.dataset import concat_examples
 from chainer.training import extensions
+import chainer.backends.cuda
 
 from . import evaluate
 from .decode.ipknot import IPknot
@@ -25,6 +25,13 @@ from .structured_loss import StructuredLoss
 
 class Train:
     def __init__(self, args):
+        if args.seed >= 0:
+            random.seed(args.seed)
+            np.random.seed(args.seed)
+            if chainer.backends.cuda.available:
+                chainer.backends.cuda.cupy.random.seed(args.seed)
+                chainer.global_config.cudnn_deterministic = True
+
         # load sequences
         self.name_set, self.seq_set, self.structure_set = load_seq(args.train_file)
         if args.test_file:
@@ -110,6 +117,8 @@ class Train:
         import argparse
         parser_training = parser.add_parser('train', help='training RNA secondary structures')
         parser_training.add_argument('--gpu', help='set GPU ID (-1 for CPU)',
+                                    type=int, default=-1)
+        parser_training.add_argument('--seed', help='set the random seed for reproducibility',
                                     type=int, default=-1)
 
         # data
