@@ -21,10 +21,10 @@ class Predict:
             self.model.to_gpu(args.gpu)
 
         if args.ipknot:
-            gamma = args.gamma if args.gamma is not None else (3.0, 3.0)
+            gamma = args.gamma if args.gamma is not None else (4.0, 2.0)
             self.decoder = IPknot(gamma)
         else:
-            gamma = args.gamma[-1] if args.gamma is not None else 3.0
+            gamma = args.gamma[-1] if args.gamma is not None else 4.0
             self.decoder = Nussinov(gamma)
 
     def run(self):

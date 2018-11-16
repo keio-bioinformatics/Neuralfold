@@ -28,25 +28,28 @@ class Nussinov(Decoder):
 
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
 
-        for j in range(N):
-            for i in reversed(range(j)):
+        # for j in range(N):
+        #     for i in reversed(range(j)):
+        for l in range(1, N):
+            for i in range(N-l):
+                j = i + l
                 s = (gamma + 1) *  bpp[i, j] - 1
                 if margin is not None:
                     s += margin[i, j]
                 if i+1 < j:
                     dp[i, j] = dp[i+1, j]
-                    tr[i, j] = 1
+                    tr[i, j] = -1
                 if i < j-1 and dp[i, j] < dp[i, j-1]:
                     dp[i, j] = dp[i, j-1]
-                    tr[i, j] = 2
+                    tr[i, j] = -2
                 if i+1 < j-1 and allowed_bp[i, j] and dp[i, j] < dp[i+1, j-1] + s:
                     dp[i, j] = dp[i+1, j-1] + s
-                    tr[i, j] = 3
+                    tr[i, j] = -3
                 for k in range(i+1, j):
                     if dp[i, j] < dp[i, k] + dp[k+1, j]:
                         dp[i, j] = dp[i, k] + dp[k+1, j]
-                        tr[i, j] = k-i+3
-        
+                        tr[i, j] = k-i
+
         return dp, tr
 
 
@@ -55,48 +58,48 @@ class Nussinov(Decoder):
         dp = np.zeros_like(bpp)
         dp_diag_i = np.zeros_like(bpp)
         dp_diag_j = np.zeros_like(bpp)
-        tr = np.zeros_like(bpp, dtype=np.int)
+        tr = np.zeros(bpp.shape, dtype=np.int)
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
         s = (gamma + 1) * bpp - 1
         if margin is not None:
             s += margin
 
-        for k in range(1, N):
-            dp_diag_1 = np.diag(dp, k=k-1)
-            v_1 = dp_diag_1[1:].reshape((N-k, 1))
-            v_2 = dp_diag_1[:-1].reshape((N-k, 1))
-            if k >= 2:
-                dp_diag_2 = np.diag(dp, k=k-2)
-                v_3 = dp_diag_2[1:-1] + np.diag(s, k=k)
-                v_3[np.diag(allowed_bp, k=k)==False] = -1e10
-                v_3 = v_3.reshape((N-k), 1)
+        for l in range(1, N):
+            dp_diag_1 = np.diag(dp, k=l-1)
+            v_1 = dp_diag_1[1:].reshape((N-l, 1))
+            v_2 = dp_diag_1[:-1].reshape((N-l, 1))
+            if l >= 2:
+                dp_diag_2 = np.diag(dp, k=l-2)
+                v_3 = dp_diag_2[1:-1] + np.diag(s, k=l)
+                v_3[np.diag(allowed_bp, k=l)==False] = -1e10
+                v_3 = v_3.reshape((N-l), 1)
             else:
-                v_3 = np.full((N-k,1), -1e10, dtype=bpp.dtype)
-            v_k = dp_diag_i[:-k, :k] + dp_diag_j[k:, :k][:, ::-1]
+                v_3 = np.full((N-l,1), -1e10, dtype=bpp.dtype)
+            v_k = dp_diag_i[:-l, :l] + dp_diag_j[l:, :l][:, ::-1]
 
-            v = np.hstack((v_1, v_2, v_3, v_k))
+            v = np.hstack((v_3, v_2, v_1, v_k))
             dp_diag = v.max(axis=1)
-            tr_diag = v.argmax(axis=1)+1
+            tr_diag = v.argmax(axis=1)-3
 
-            dp += np.diag(dp_diag, k=k) 
-            tr += np.diag(tr_diag, k=k)
-            dp_diag_i[:-k, k] = dp_diag
-            dp_diag_j[k:, k] = dp_diag
+            dp += np.diag(dp_diag, k=l) 
+            tr += np.diag(tr_diag, k=l)
+            dp_diag_i[:-l, l] = dp_diag
+            dp_diag_j[l:, l] = dp_diag
 
         return dp, tr
 
 
     def traceback(self, tr, i, j, pair):
         if i < j:
-            if tr[i, j] == 1:
+            if tr[i, j] == -1:
                 pair = self.traceback(tr, i+1, j, pair)
-            elif tr[i, j] == 2:
+            elif tr[i, j] == -2:
                 pair = self.traceback(tr, i, j-1, pair)
-            elif tr[i, j] == 3:
+            elif tr[i, j] == -3:
                 pair.append((i,j))
                 pair = self.traceback(tr, i+1, j-1, pair)
-            elif tr[i, j] > 3:
-                k = i+tr[i, j]-3
+            elif tr[i, j] >= 0:
+                k = tr[i, j]+i
                 pair = self.traceback(tr, i, k, pair)
                 pair = self.traceback(tr, k+1, j, pair)
         return pair

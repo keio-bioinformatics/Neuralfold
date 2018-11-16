@@ -65,10 +65,10 @@ class Train:
         pos_margin = args.positive_margin
         neg_margin = args.negative_margin
         if args.ipknot:
-            gamma = args.gamma if args.gamma is not None else (3.0, 3.0)
+            gamma = args.gamma if args.gamma is not None else (4.0, 2.0)
             decoder = IPknot(gamma)
         else:
-            gamma = args.gamma if args.gamma is not None else 3.0
+            gamma = args.gamma[-1] if args.gamma is not None else 4.0
             decoder = Nussinov(gamma)
 
         # loss function
