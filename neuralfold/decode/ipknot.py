@@ -105,10 +105,10 @@ class IPknot(Decoder):
                     prob += pulp.lpSum(c_do) >= 0
 
         # solve the IP problem
-        prob.solve(pulp.CPLEX_CMD(msg=0))
+        #prob.solve(pulp.CPLEX_CMD(msg=0))
         #prob.solve(pulp.GUROBI_CMD(msg=0))
         #prob.solve(pulp.GLPK_CMD(msg=0))
-        #prob.solve()
+        prob.solve()
 
         pair = [ [] for _ in range(K) ]
         for k in range(K):

@@ -1,6 +1,6 @@
 def get_score(ref_set, pred_set, global_average=True):
     def flattern(paren_list):
-        if len(paren_list) == 0 or type(paren_list[0][0]) is int:
+        if len(paren_list) == 0 or len(paren_list[0]) != 0 and type(paren_list[0][0]) is int:
             return paren_list
         else:
             ret = []
@@ -18,7 +18,7 @@ def get_score(ref_set, pred_set, global_average=True):
 
     def calc(tp, fp, fn):
         sen = tp / (tp + fn) if tp + fn != 0 else 0
-        ppv = tp / (tp + fp) if tp + fn != 0 else 0
+        ppv = tp / (tp + fp) if tp + fp != 0 else 0
         f_val = 2 * (sen * ppv) / (sen + ppv) if sen + ppv != 0 else 0
         return sen, ppv, f_val
 

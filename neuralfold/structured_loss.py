@@ -37,7 +37,7 @@ class StructuredLoss(chainer.Chain):
             loss += predicted_score - true_score
 
             if self.compute_accuracy:
-                pred_structure = self.decoder.decode(to_cpu(predicted_BP[k].array[0:N, 0:N]))
+                pred_structure = self.decoder.decode(seq, to_cpu(predicted_BP[k].array[0:N, 0:N]))
                 pred_structure_set.append(pred_structure)
 
         loss = loss[0] / B

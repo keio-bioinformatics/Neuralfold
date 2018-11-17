@@ -113,6 +113,7 @@ class MLP(Chain):
             x[:, :, K-l*5:K+l*5] = np.tile([0, 0, 0, 0, 1], l*2).astype(np.float32)
         return x
 
+
     def make_input_vector_ij(self, v, i, j, bit_len=20, scale=1.5):
         B, _, K = v.shape
         W = self.neighbor
@@ -127,7 +128,7 @@ class MLP(Chain):
         return x
 
 
-    def compute_bpp_1(self, seq):
+    def compute_bpp_0(self, seq):
         seq_vec = self.make_onehot_vector(seq)
         B, N, _ = seq_vec.shape
         seq_vec = self.make_context_vector(seq_vec)
@@ -147,30 +148,31 @@ class MLP(Chain):
         return bpp
 
 
+    def diagonalize(self, x, k=0):
+        xp = self.xp
+        B, N_orig = x.shape
+        N = N_orig + abs(k)
+        if k>0:
+            x = F.hstack((xp.zeros((B, k), dtype=x.dtype), x))
+        elif k<0:
+            x = F.hstack((x, xp.zeros((B, -k), dtype=x.dtype)))
+        x = F.tile(x, N).reshape(B, N, N)
+        return x * xp.diag(xp.ones(N_orig), k=k)
+
+
     def compute_bpp(self, seq):
         xp = self.xp
         seq_vec = self.make_onehot_vector(seq)
         B, N, _ = seq_vec.shape
         seq_vec = self.make_context_vector(seq_vec)
 
-        bpp_d = Variable(xp.empty((B, 0, N), dtype=np.float32))
+        bpp = Variable(xp.zeros((B, N, N), dtype=np.float32))
         for k in range(1, N):
             x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
             x = x.reshape(B*(N-k), -1)
             x = xp.asarray(x)
-            y = self(x).reshape(B, 1, N-k)
-
-            bpp_i = Variable(xp.zeros((B, 1, k), dtype=np.float32))
-            bpp_i = F.concat((bpp_i, y), axis=2) # (B, 1, N)
-            bpp_d = F.concat((bpp_d, bpp_i), axis=1)
-        bpp_i = Variable(xp.zeros((B, 1, N), dtype=np.float32))
-        bpp_d = F.concat((bpp_d, bpp_i), axis=1)
-
-        bpp = Variable(xp.empty((B, 0, N), dtype=np.float32))
-        for k in range(0, N):
-            d_k = F.diagonal(bpp_d, axis1=1, axis2=2, offset=k).reshape((B, 1, N-k))
-            bpp_i = Variable(xp.zeros((B, 1, k), dtype=np.float32))
-            bpp_i = F.concat((bpp_i, d_k), axis=2)
-            bpp = F.concat((bpp, bpp_i), axis=1)
+            y = self(x) # (B*(N-k), 1)
+            y = y.reshape(B, N-k) 
+            bpp += self.diagonalize(y, k=k) # (B, N, N)
 
         return bpp
