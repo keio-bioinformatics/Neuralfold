@@ -20,12 +20,15 @@ class Predict:
         if args.gpu >= 0:
             self.model.to_gpu(args.gpu)
 
-        if args.ipknot:
+        if args.decode == 'ipknot':
             gamma = args.gamma if args.gamma is not None else (4.0, 2.0)
-            self.decoder = IPknot(gamma)
-        else:
+            self.decoder = IPknot(gamma, **IPknot.parse_args(args))
+        elif args.decode == 'nussinov':
             gamma = args.gamma[-1] if args.gamma is not None else 4.0
-            self.decoder = Nussinov(gamma)
+            self.decoder = Nussinov(gamma, **Nussinov.parse_args(args))
+        else:
+            raise RuntimeError("Unknown decoder: {}".format(args.decode))
+
 
     def run(self):
         predicted_structure_set = []
@@ -66,11 +69,14 @@ class Predict:
         parser_pred.add_argument('-bp','--bpseq', help =
                                 'Use bpseq format',
                                 action = 'store_true')
-        parser_pred.add_argument('-ip','--ipknot',
-                                help = 'Predict pseudoknotted secondary structures',
-                                action = 'store_true')
         parser_pred.add_argument('-g','--gamma',
                                 help = 'Balance between sensitivity and specificity ',
                                 type=float, action='append')
+        parser_pred.add_argument('-d', '--decode',
+                                help='Select a decoder for secondary structure prediction',
+                                choices=('nussinov', 'ipknot'),
+                                type=str, default='nussinov')
+        Nussinov.add_args(parser_pred)
+        IPknot.add_args(parser_pred)
 
         parser_pred.set_defaults(func = lambda args: Predict(args).run())

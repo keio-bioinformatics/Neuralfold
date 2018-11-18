@@ -32,7 +32,7 @@ class Decoder:
             seq = seq.upper()
             for j in range(N):
                 for i in range(j):
-                    if (seq[i], seq[j]) in canonicals:
+                    if (seq[i], seq[j]) in canonicals and j-i>2:
                         allowed_bp[i, j] = allowed_bp[j, i] = True
         elif isinstance(allowed_bp, list):
             a = np.zeros((N, N), dtype=np.bool)

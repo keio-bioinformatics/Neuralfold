@@ -64,16 +64,19 @@ class Train:
         # decoder setup
         pos_margin = args.positive_margin
         neg_margin = args.negative_margin
-        if args.ipknot:
+        if args.decode == 'ipknot':
             gamma = args.gamma if args.gamma is not None else (4.0, 2.0)
-            decoder = IPknot(gamma)
-        else:
+            decoder = IPknot(gamma, **IPknot.parse_args(args))
+        elif args.decode == 'nussinov':
             gamma = args.gamma[-1] if args.gamma is not None else 4.0
-            decoder = Nussinov(gamma)
+            decoder = Nussinov(gamma, **Nussinov.parse_args(args))
+        else:
+            raise RuntimeError("Unknown decoder: {}".format(args.decode))
 
         # loss function
         self.net = StructuredLoss(self.model, decoder, pos_margin, neg_margin, 
-                                compute_accuracy=self.compute_accuracy)
+                                compute_accuracy=self.compute_accuracy,
+                                verbose=args.verbose)
 
 
     def run(self):
@@ -139,12 +142,20 @@ class Train:
                                     type=str, default='')
 
         # training parameters
+        parser_training.add_argument('-v', '--verbose', help='verbose output',
+                                    action='store_true')
         parser_training.add_argument('-i','--epochs', help='the number of epochs',
                                     type=int, default=1)
         parser_training.add_argument('--batchsize', help='batch size', 
                                     type=int, default=1)
         parser_training.add_argument('--compute_accuracy', help='compute accuracy during training',
                                     action='store_true')
+        parser_training.add_argument('-m','--positive-margin',
+                                    help='margin for positives',
+                                    type=float, default=0.2)
+        parser_training.add_argument('--negative-margin',
+                                    help='margin for negatives',
+                                    type=float, default=0.2)
 
         # neural networks architecture
         parser_training.add_argument('-l','--learning_model',
@@ -156,16 +167,13 @@ class Train:
 
         # decoder option
         parser_training.add_argument('-g','--gamma',
-                                    help='balance between the sensitivity and specificity ',
+                                    help='balance between the sensitivity and specificity',
                                     type=float, action='append')
-        parser_training.add_argument('-m','--positive-margin',
-                                    help='margin for positives',
-                                    type=float, default=0.2)
-        parser_training.add_argument('--negative-margin',
-                                    help='margin for negatives',
-                                    type=float, default=0.2)
-        parser_training.add_argument('-ip','--ipknot',
-                                    help='predict pseudoknotted secaondary structure',
-                                    action='store_true')
+        parser_training.add_argument('-d', '--decode',
+                                    help='Select a decoder for secondary structure prediction',
+                                    choices=('nussinov', 'ipknot'),
+                                    type=str, default='nussinov')
+        IPknot.add_args(parser_training)
+        Nussinov.add_args(parser_training)
 
         parser_training.set_defaults(func = lambda args: Train(args).run())

@@ -4,9 +4,23 @@ from chainer import Variable
 from . import Decoder
 
 class Nussinov(Decoder):
-    def __init__(self, gamma=None, use_simple_dp=False):
+    def __init__(self, gamma=None, simple_dp=False):
         self.gamma = gamma
-        self.use_simple_dp = use_simple_dp
+        self.simple_dp = simple_dp
+
+
+    @classmethod
+    def add_args(cls, parser):
+        group = parser.add_argument_group('Options for Nussinov')
+        group.add_argument('--simple-dp', 
+                        help='Use simple dynamic programming', 
+                        action='store_true')
+
+    @classmethod    
+    def parse_args(cls, args):
+        hyper_params = ('simple_dp',)
+        return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
+
 
     def decode(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical'):
         '''Nussinov-style decoding algorithm    
@@ -14,7 +28,7 @@ class Nussinov(Decoder):
         gamma = self.gamma if gamma is None else gamma
         N = len(bpp)
         bpp = bpp.data if type(bpp) is Variable else bpp
-        if self.use_simple_dp:
+        if self.simple_dp:
             _, tr = self.build_dp(seq, bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
         else:
             _, tr = self.build_dp_v(seq, bpp, gamma=gamma, allowed_bp=allowed_bp, margin=margin)
@@ -107,7 +121,7 @@ class Nussinov(Decoder):
     def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)
-        if type(bpp) is Variable:
+        if isinstance(bpp, Variable):
             s = Variable(s)
 
         for i, j in pair:

@@ -6,10 +6,43 @@ from . import Decoder
 
 
 class IPknot(Decoder):
-    def __init__(self, gamma=None, stacking=True, approx_cutoff=True):
+    def __init__(self, gamma=None, nostacking=False, approx_cutoff=True,
+                    cplex=False, cplex_path=None, gurobi=False, gurobi_path=None):
         self.gamma = gamma
-        self.stacking = stacking
+        self.stacking = not nostacking
         self.approx_cutoff = approx_cutoff
+        self.solver = None
+        if cplex:
+            print(cplex_path)
+            self.solver = pulp.CPLEX_CMD(path=cplex_path, msg=False)
+        if gurobi:
+            self.solver = pulp.GUROBI_CMD(path=gurobi_path, msg=False)
+
+
+    @classmethod
+    def add_args(cls, parser):
+        group = parser.add_argument_group('Options for IPknot')
+        group.add_argument('--nostacking', 
+                        help='no stacking constrint', 
+                        action='store_true')
+        group.add_argument('--cplex',
+                        help='use CPLEX',
+                        action='store_true')
+        group.add_argument('--cplex-path',
+                        help='path of CPLEX executable',
+                        type=str, default=None)
+        group.add_argument('--gurobi',
+                        help='use Gurobi',
+                        action='store_true')
+        group.add_argument('--gurobi-path',
+                        help='path of Gurobi executable',
+                        type=str, default=None)
+
+
+    @classmethod    
+    def parse_args(cls, args):
+        hyper_params = ('cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'nostacking')
+        return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
     
     def decode(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', disable_th=False):
@@ -105,10 +138,7 @@ class IPknot(Decoder):
                     prob += pulp.lpSum(c_do) >= 0
 
         # solve the IP problem
-        #prob.solve(pulp.CPLEX_CMD(msg=0))
-        #prob.solve(pulp.GUROBI_CMD(msg=0))
-        #prob.solve(pulp.GLPK_CMD(msg=0))
-        prob.solve()
+        prob.solve(self.solver)
 
         pair = [ [] for _ in range(K) ]
         for k in range(K):
@@ -120,7 +150,7 @@ class IPknot(Decoder):
         return pair
 
 
-    def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
+    def calc_score_0(self, seq, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)
         if isinstance(bpp, Variable):
@@ -140,6 +170,29 @@ class IPknot(Decoder):
                     s += margin[i, j]
 
         return s.reshape(1,)
+
+
+    def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
+        gamma = self.gamma if gamma is None else gamma
+        s = np.zeros((1,1), dtype=np.float32)
+        if isinstance(bpp, Variable):
+            s = Variable(s)
+
+        if len(pair) == 0:
+            return s.reshape(1,)
+        elif len(gamma) == len(pair) and isinstance(pair[0], list):
+            temp = []
+            for kpair in pair:
+                temp.extend(kpair)
+            pair = temp
+
+        for i, j in pair:
+            s += (gamma[0] + 1) * bpp[i, j] - 1
+            if margin is not None:
+                s += margin[i, j]
+
+        return s.reshape(1,)
+
 
 if __name__ == '__main__':
     import sys
