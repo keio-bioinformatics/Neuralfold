@@ -6,25 +6,42 @@ import chainer.functions as F
 from . import evaluate
 
 class StructuredLoss(chainer.Chain):
-    def __init__(self, model, decoder, pos_margin, neg_margin, compute_accuracy=False, verbose=False):
+    def __init__(self, model, decoder, positive_margin, negative_margin,
+                compute_accuracy=False, verbose=False):
         super(StructuredLoss, self).__init__()
 
         with self.init_scope():
             self.model = model
 
         self.decoder = decoder
-        self.pos_margin = pos_margin
-        self.neg_margin = neg_margin
+        self.pos_margin = positive_margin
+        self.neg_margin = negative_margin
         self.compute_accuracy = compute_accuracy
         self.verbose = verbose
 
 
+    @classmethod
+    def add_args(cls, parser):
+        group = parser.add_argument_group('Options for structured loss function')
+        group.add_argument('-m','--positive-margin',
+                            help='margin for positives',
+                            type=float, default=0.2)
+        group.add_argument('--negative-margin',
+                            help='margin for negatives',
+                            type=float, default=0.2)
+
+
+    @classmethod    
+    def parse_args(cls, args):
+        hyper_params = ('positive_margin', 'negative_margin')
+        return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
+
+    
     def __call__(self, name_set, seq_set, true_structure_set):
         B = len(seq_set)
         loss = 0
         pred_structure_set = []
         predicted_BP = self.model.compute_bpp(seq_set)
-        #for k, (name, seq, true_structure) in enumerate(zip(name_set, seq_set, true_structure_set)):
         for k, (name, seq, true_structure) in enumerate(zip(name_set, seq_set, true_structure_set)):
             N = len(seq)
             #print(name, N, 'bp')

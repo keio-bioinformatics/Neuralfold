@@ -76,7 +76,8 @@ class Train:
         # loss function
         self.net = StructuredLoss(self.model, decoder, pos_margin, neg_margin, 
                                 compute_accuracy=self.compute_accuracy,
-                                verbose=args.verbose)
+                                verbose=args.verbose, 
+                                **StructuredLoss.parse_args(args))
 
 
     def run(self):
@@ -148,18 +149,13 @@ class Train:
                                     type=int, default=1)
         parser_training.add_argument('--batchsize', help='batch size', 
                                     type=int, default=1)
-        parser_training.add_argument('--compute_accuracy', help='compute accuracy during training',
+        parser_training.add_argument('--compute-accuracy', help='compute accuracy during training',
                                     action='store_true')
-        parser_training.add_argument('-m','--positive-margin',
-                                    help='margin for positives',
-                                    type=float, default=0.2)
-        parser_training.add_argument('--negative-margin',
-                                    help='margin for negatives',
-                                    type=float, default=0.2)
+        StructuredLoss.add_args(parser_training)
 
         # neural networks architecture
-        parser_training.add_argument('-l','--learning_model',
-                                    help='learning_model',
+        parser_training.add_argument('-l','--learning-model',
+                                    help='Select a learning model',
                                     choices=('MLP', 'RNN'),
                                     type=str, default='MLP')
         MLP.add_args(parser_training)

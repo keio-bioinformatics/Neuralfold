@@ -1,7 +1,10 @@
+import argparse
+
 import numpy as np
 from chainer import Variable
 
 from . import Decoder
+
 
 class Nussinov(Decoder):
     def __init__(self, gamma=None, simple_dp=False):
@@ -13,7 +16,8 @@ class Nussinov(Decoder):
     def add_args(cls, parser):
         group = parser.add_argument_group('Options for Nussinov')
         group.add_argument('--simple-dp', 
-                        help='Use simple dynamic programming', 
+                        #help='Use simple dynamic programming', 
+                        help=argparse.SUPPRESS,
                         action='store_true')
 
     @classmethod    

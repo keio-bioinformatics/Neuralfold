@@ -1,3 +1,5 @@
+import argparse
+
 import numpy as np
 import pulp
 from chainer import Variable
@@ -6,14 +8,13 @@ from . import Decoder
 
 
 class IPknot(Decoder):
-    def __init__(self, gamma=None, nostacking=False, approx_cutoff=True,
+    def __init__(self, gamma=None, no_stacking=False, no_approx_thresholdcut=False,
                     cplex=False, cplex_path=None, gurobi=False, gurobi_path=None):
         self.gamma = gamma
-        self.stacking = not nostacking
-        self.approx_cutoff = approx_cutoff
+        self.stacking = not no_stacking
+        self.approx_cutoff = not no_approx_thresholdcut
         self.solver = None
         if cplex:
-            print(cplex_path)
             self.solver = pulp.CPLEX_CMD(path=cplex_path, msg=False)
         if gurobi:
             self.solver = pulp.GUROBI_CMD(path=gurobi_path, msg=False)
@@ -22,7 +23,7 @@ class IPknot(Decoder):
     @classmethod
     def add_args(cls, parser):
         group = parser.add_argument_group('Options for IPknot')
-        group.add_argument('--nostacking', 
+        group.add_argument('--no-stacking', 
                         help='no stacking constrint', 
                         action='store_true')
         group.add_argument('--cplex',
@@ -37,11 +38,15 @@ class IPknot(Decoder):
         group.add_argument('--gurobi-path',
                         help='path of Gurobi executable',
                         type=str, default=None)
+        group.add_argument('--no-approx-thresholdcut',
+                        #help='approximate threshold cut',
+                        help=argparse.SUPPRESS,
+                        action='store_true')
 
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'nostacking')
+        hyper_params = ('cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'no_stacking', 'no_approx_thresholdcut')
         return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
     

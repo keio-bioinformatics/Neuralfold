@@ -61,16 +61,15 @@ class Predict:
                                 type=int, default=-1)
 
         parser_pred.add_argument('seq_file',
-                                help = 'FASTA or BPseq file for prediction',
+                                help='FASTA or BPseq file for prediction',
                                 nargs='+',
                                 type=argparse.FileType('r'))
         parser_pred.add_argument('-p', '--parameters', help = 'Initial parameter file',
                                 type=str, default="NEURALfold_parameters")
-        parser_pred.add_argument('-bp','--bpseq', help =
-                                'Use bpseq format',
-                                action = 'store_true')
+        # parser_pred.add_argument('-bp','--bpseq', help='Use bpseq format',
+        #                         action='store_true')
         parser_pred.add_argument('-g','--gamma',
-                                help = 'Balance between sensitivity and specificity ',
+                                help='Balance between sensitivity and specificity ',
                                 type=float, action='append')
         parser_pred.add_argument('-d', '--decode',
                                 help='Select a decoder for secondary structure prediction',
