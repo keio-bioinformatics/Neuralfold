@@ -3,6 +3,7 @@ import argparse
 import numpy as np
 import pulp
 from chainer import Variable
+import chainer.functions as F
 
 from . import Decoder
 
@@ -74,7 +75,21 @@ class IPknot(Decoder):
             for i in range(N):
                 th_i = bpp[i, sorted_bp_idx[i, top_n]]
                 enabled_bp[i, bpp[i, :]>=th_i] = True
+                # for j in sorted_bp_idx[i, :top_n]:
+                #     enabled_bp[i, j] = True
             allowed_bp &= enabled_bp & np.transpose(enabled_bp)
+
+        # if self.approx_cutoff and int(max(gamma))<N:
+        #     bpp_tri = np.triu(bpp)
+        #     bpp = bpp_tri + np.transpose(bpp_tri)
+        #     bpp[bpp<0.01] = 0.01
+        #     bpp[bpp>0.99] = 0.99
+        #     bpp = np.log(bpp) - np.log(1-bpp)
+        #     bpp = F.softmax(bpp, axis=1).data
+        #     th = 1./(max(gamma)+1)
+        #     #print(np.sum(bpp>th, axis=1))
+        #     allowed_bp &= bpp>th
+
 
         # variables and objective function
         x = [[[None for _ in range(N)] for _ in range(N)] for _ in range(K)]

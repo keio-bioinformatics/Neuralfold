@@ -62,8 +62,6 @@ class Train:
                 raise RuntimeError("{} is unknown model class.".format(args.learning_model))
 
         # decoder setup
-        pos_margin = args.positive_margin
-        neg_margin = args.negative_margin
         if args.decode == 'ipknot':
             gamma = args.gamma if args.gamma is not None else (4.0, 2.0)
             decoder = IPknot(gamma, **IPknot.parse_args(args))
@@ -74,7 +72,7 @@ class Train:
             raise RuntimeError("Unknown decoder: {}".format(args.decode))
 
         # loss function
-        self.net = StructuredLoss(self.model, decoder, pos_margin, neg_margin, 
+        self.net = StructuredLoss(self.model, decoder, 
                                 compute_accuracy=self.compute_accuracy,
                                 verbose=args.verbose, 
                                 **StructuredLoss.parse_args(args))

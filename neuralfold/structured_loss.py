@@ -51,6 +51,7 @@ class StructuredLoss(chainer.Chain):
 
             predicted_structure = self.decoder.decode(seq, to_cpu(predicted_BP[k].array[0:N, 0:N]), margin=margin)
             predicted_score = self.decoder.calc_score(seq, predicted_BP[k], pair=predicted_structure, margin=margin)
+            predicted_score += self.pos_margin * len(true_structure)
             true_score = self.decoder.calc_score(seq, predicted_BP[k], pair=true_structure)
             loss += predicted_score - true_score
             if self.verbose:
