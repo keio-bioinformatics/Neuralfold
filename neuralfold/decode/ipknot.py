@@ -171,7 +171,7 @@ class IPknot(Decoder):
         return pair
 
 
-    def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', max_iter=100):
+    def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', max_iter=1000):
         verbose = True
         gamma = self.gamma if gamma is None else gamma
         bpp = bpp.array if isinstance(bpp, Variable) else bpp
@@ -181,7 +181,10 @@ class IPknot(Decoder):
         nussinov = Nussinov()
 
         lag = Lagrangian(K, N, dtype=bpp.dtype)
-        optimizer = optimizers.SGD(lr=0.01).setup(lag)
+        optimizer = optimizers.SGD(lr=0.1).setup(lag)
+        #optimizer = optimizers.MomentumSGD().setup(lag)
+        #optimizer = optimizers.CorrectedMomentumSGD().setup(lag)
+        optimizer = optimizers.NesterovAG(lr=0.01).setup(lag)
 
         for it in range(max_iter):
             if verbose:
@@ -195,23 +198,20 @@ class IPknot(Decoder):
                 y.append(y_p)
                 s += nussinov.calc_score(seq, bpp, y_p, gamma=gamma[p], margin=pmargin)
             s += lag.constants()
-            if verbose:
-                print(seq)
-                for y_p in y:
-                    print(nussinov.dot_parenthesis(seq, y_p))
 
             lag.cleargrads()
             s.backward()
             c = lag.count_violates()
+            if verbose:
+                print('score: {:.3f}, violated constraints: {}'.format(s.array[0], c))
+                print(seq)
+                for y_p in y:
+                    print(nussinov.dot_parenthesis(seq, y_p))
+                print()
             if c == 0:
                 break
-            if verbose:
-                print('violated constraints: {}'.format(c))
-                print()
             optimizer.update()
-            print(np.sum(lag.mu.data>0), np.sum(lag.mu.data<0), np.sum(lag.xi.data>0), np.sum(lag.xi.data<0))
             lag.clip()
-            print(np.sum(lag.mu.data>0), np.sum(lag.mu.data<0), np.sum(lag.xi.data>0), np.sum(lag.xi.data<0))            
         
         return y
 
@@ -278,17 +278,18 @@ class Lagrangian(link.Link):
 
         # constraint 1:
         mu_temp = F.tile(self.mu, (K, N, 1))
-        penalty += - mu_temp - F.transpose(mu_temp, axes=(0, 2, 1))
+        penalty += - (mu_temp + F.transpose(mu_temp, axes=(0, 2, 1)))
 
         # constraint 3:
+        z = xp.array([0], dtype=dtype)
         for p in range(K):
             for q in range(p):
                 for l in range(N):
                     for k in range(l):
-                        x = xp.zeros((K, N, N), dtype=dtype)
-                        x[q, :k, k+1:l] = 1
-                        x[q, k+1:l, l+1:] = 1
-                        penalty += x * self.xi[p, q, k, l]
+                        c = xp.zeros((K, N, N), dtype=np.bool)
+                        c[q, :k, k+1:l] = True
+                        c[q, k+1:l, l+1:] = True
+                        penalty += F.where(c, self.xi[p, q, k, l], z)
                 x = xp.zeros((K, N, N), dtype=dtype)
                 x[p, :, :] = -1
                 penalty += x * self.xi[:, q, :, :]
@@ -302,12 +303,12 @@ class Lagrangian(link.Link):
 
     def mask(self, p, th=0.):
         xp = self.xp
-        return F.where(p.array>th, p, xp.zeros_like(p.array))
+        p.array = xp.where(p.array>th, p.array, xp.zeros_like(p.array))
 
 
     def clip(self):
-        self.mu = self.mask(self.mu)
-        self.xi = self.mask(self.xi)
+        self.mask(self.mu)
+        self.mask(self.xi)
 
     
     def count_violates(self):
