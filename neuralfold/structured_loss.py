@@ -41,7 +41,7 @@ class StructuredLoss(chainer.Chain):
         B = len(seq_set)
         loss = 0
         pred_structure_set = []
-        predicted_BP = self.model.compute_bpp(seq_set)
+        bpp = self.model.compute_bpp(seq_set)
         for k, (name, seq, true_structure) in enumerate(zip(name_set, seq_set, true_structure_set)):
             N = len(seq)
             #print(name, N, 'bp')
@@ -49,10 +49,10 @@ class StructuredLoss(chainer.Chain):
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(seq, to_cpu(predicted_BP[k].array[0:N, 0:N]), margin=margin)
-            predicted_score = self.decoder.calc_score(seq, predicted_BP[k], pair=predicted_structure, margin=margin)
+            predicted_structure = self.decoder.decode(seq, to_cpu(bpp[k].array[0:N, 0:N]), margin=margin)
+            predicted_score = self.decoder.calc_score(seq, bpp[k], pair=predicted_structure, margin=margin)
             predicted_score += self.pos_margin * len(true_structure)
-            true_score = self.decoder.calc_score(seq, predicted_BP[k], pair=true_structure)
+            true_score = self.decoder.calc_score(seq, bpp[k], pair=true_structure)
             loss += predicted_score - true_score
             if self.verbose:
                 print(name)
@@ -63,7 +63,7 @@ class StructuredLoss(chainer.Chain):
                 print()
 
             if self.compute_accuracy:
-                pred_structure = self.decoder.decode(seq, to_cpu(predicted_BP[k].array[0:N, 0:N]))
+                pred_structure = self.decoder.decode(seq, to_cpu(bpp[k].array[0:N, 0:N]))
                 pred_structure_set.append(pred_structure)
 
         loss = loss[0] / B

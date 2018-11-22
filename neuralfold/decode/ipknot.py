@@ -1,11 +1,12 @@
 import argparse
 
+import chainer.functions as F
 import numpy as np
 import pulp
-from chainer import Variable
-import chainer.functions as F
+from chainer import Variable, link, optimizers, variable
 
 from . import Decoder
+from .nussinov import Nussinov
 
 
 class IPknot(Decoder):
@@ -170,6 +171,51 @@ class IPknot(Decoder):
         return pair
 
 
+    def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', max_iter=100):
+        verbose = True
+        gamma = self.gamma if gamma is None else gamma
+        bpp = bpp.array if isinstance(bpp, Variable) else bpp
+        allowed_bp = self.allowed_basepairs(seq, allowed_bp)
+        K = len(gamma)
+        N = len(seq)
+        nussinov = Nussinov()
+
+        lag = Lagrangian(K, N, dtype=bpp.dtype)
+        optimizer = optimizers.SGD(lr=0.01).setup(lag)
+
+        for it in range(max_iter):
+            if verbose:
+                print('iter:', it)
+            penalty = lag()
+            s = 0
+            y = []
+            for p in range(K):
+                pmargin = penalty[p] if margin is None else margin+penalty[p]
+                y_p = nussinov.decode(seq, bpp, gamma=gamma[p], allowed_bp=allowed_bp, margin=pmargin.array)
+                y.append(y_p)
+                s += nussinov.calc_score(seq, bpp, y_p, gamma=gamma[p], margin=pmargin)
+            s += lag.constants()
+            if verbose:
+                print(seq)
+                for y_p in y:
+                    print(nussinov.dot_parenthesis(seq, y_p))
+
+            lag.cleargrads()
+            s.backward()
+            c = lag.count_violates()
+            if c == 0:
+                break
+            if verbose:
+                print('violated constraints: {}'.format(c))
+                print()
+            optimizer.update()
+            print(np.sum(lag.mu.data>0), np.sum(lag.mu.data<0), np.sum(lag.xi.data>0), np.sum(lag.xi.data<0))
+            lag.clip()
+            print(np.sum(lag.mu.data>0), np.sum(lag.mu.data<0), np.sum(lag.xi.data>0), np.sum(lag.xi.data<0))            
+        
+        return y
+
+
     def calc_score_0(self, seq, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)
@@ -212,6 +258,62 @@ class IPknot(Decoder):
                 s += margin[i, j]
 
         return s.reshape(1,)
+
+
+class Lagrangian(link.Link):
+    def __init__(self, K, N, dtype=np.float32):
+        super(Lagrangian, self).__init__()
+        xp = self.xp
+        with self.init_scope():
+            self.mu = variable.Parameter(xp.zeros((N,), dtype=dtype))
+            self.xi = variable.Parameter(xp.zeros((K, K, N, N), dtype=dtype))
+
+
+    def __call__(self):
+        K = self.xi.shape[0]
+        N = self.xi.shape[2]
+        xp = self.xp
+        dtype = self.xi.dtype
+        penalty = Variable(xp.zeros((K, N, N), dtype=dtype))
+
+        # constraint 1:
+        mu_temp = F.tile(self.mu, (K, N, 1))
+        penalty += - mu_temp - F.transpose(mu_temp, axes=(0, 2, 1))
+
+        # constraint 3:
+        for p in range(K):
+            for q in range(p):
+                for l in range(N):
+                    for k in range(l):
+                        x = xp.zeros((K, N, N), dtype=dtype)
+                        x[q, :k, k+1:l] = 1
+                        x[q, k+1:l, l+1:] = 1
+                        penalty += x * self.xi[p, q, k, l]
+                x = xp.zeros((K, N, N), dtype=dtype)
+                x[p, :, :] = -1
+                penalty += x * self.xi[:, q, :, :]
+
+        return penalty
+
+
+    def constants(self):
+        return F.sum(self.mu)
+
+
+    def mask(self, p, th=0.):
+        xp = self.xp
+        return F.where(p.array>th, p, xp.zeros_like(p.array))
+
+
+    def clip(self):
+        self.mu = self.mask(self.mu)
+        self.xi = self.mask(self.xi)
+
+    
+    def count_violates(self):
+        xp = self.xp
+        c = xp.sum(self.mu.grad < 0) + xp.sum(self.xi.grad < 0)
+        return c
 
 
 if __name__ == '__main__':

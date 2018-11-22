@@ -24,9 +24,11 @@ class Decoder:
 
     def allowed_basepairs(self, seq, allowed_bp):
         N = len(seq)
-        if allowed_bp is None:
+        if isinstance(allowed_bp, np.ndarray):
+            pass    
+        elif allowed_bp is None:
             allowed_bp = np.ones((N, N), dtype=np.bool)
-        elif allowed_bp == 'canonical':
+        elif isinstance(allowed_bp, str) and allowed_bp == 'canonical':
             allowed_bp = np.zeros((N, N), dtype=np.bool)
             canonicals = {('A', 'U'), ('U', 'A'), ('G', 'C'), ('C', 'G'), ('G', 'U'), ('U', 'G' )}
             seq = seq.upper()
