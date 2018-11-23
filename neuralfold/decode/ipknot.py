@@ -11,15 +11,19 @@ from .nussinov import Nussinov
 
 class IPknot(Decoder):
     def __init__(self, gamma=None, no_stacking=False, no_approx_thresholdcut=False,
-                    cplex=False, cplex_path=None, gurobi=False, gurobi_path=None):
+                    cplex=False, cplex_path=None, gurobi=False, gurobi_path=None,
+                    dualdecomp=False):
         self.gamma = gamma
         self.stacking = not no_stacking
         self.approx_cutoff = not no_approx_thresholdcut
         self.solver = None
+        self.decode = self.decode_ip
         if cplex:
             self.solver = pulp.CPLEX_CMD(path=cplex_path, msg=False)
         if gurobi:
             self.solver = pulp.GUROBI_CMD(path=gurobi_path, msg=False)
+        if dualdecomp:
+            self.decode = self.decode_dd
 
 
     @classmethod
@@ -27,6 +31,9 @@ class IPknot(Decoder):
         group = parser.add_argument_group('Options for IPknot')
         group.add_argument('--no-stacking', 
                         help='no stacking constrint', 
+                        action='store_true')
+        group.add_argument('--dualdecomp',
+                        help='use dual decomposition algorithm',
                         action='store_true')
         group.add_argument('--cplex',
                         help='use CPLEX',
@@ -48,11 +55,11 @@ class IPknot(Decoder):
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'no_stacking', 'no_approx_thresholdcut')
+        hyper_params = ('dualdecomp', 'cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'no_stacking', 'no_approx_thresholdcut')
         return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
     
-    def decode(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', disable_th=False):
+    def decode_ip(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', disable_th=False):
         '''IPknot-style decoding algorithm    
         '''
         gamma = self.gamma if gamma is None else gamma
@@ -172,46 +179,23 @@ class IPknot(Decoder):
 
 
     def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', max_iter=1000):
-        verbose = True
+        verbose = False
+        lr0 = 0.5
         gamma = self.gamma if gamma is None else gamma
         bpp = bpp.array if isinstance(bpp, Variable) else bpp
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
+        xp = np
+        dtype = bpp.dtype
         K = len(gamma)
         N = len(seq)
-        nussinov = Nussinov()
-
-        lag = Lagrangian(K, N, dtype=bpp.dtype)
-        optimizer = optimizers.SGD(lr=0.1).setup(lag)
-        #optimizer = optimizers.MomentumSGD().setup(lag)
-        #optimizer = optimizers.CorrectedMomentumSGD().setup(lag)
-        optimizer = optimizers.NesterovAG(lr=0.01).setup(lag)
+        lagrangian = Lagrangian(K, N, lr0, dtype=dtype, xp=xp, verbose=verbose)
 
         for it in range(max_iter):
             if verbose:
                 print('iter:', it)
-            penalty = lag()
-            s = 0
-            y = []
-            for p in range(K):
-                pmargin = penalty[p] if margin is None else margin+penalty[p]
-                y_p = nussinov.decode(seq, bpp, gamma=gamma[p], allowed_bp=allowed_bp, margin=pmargin.array)
-                y.append(y_p)
-                s += nussinov.calc_score(seq, bpp, y_p, gamma=gamma[p], margin=pmargin)
-            s += lag.constants()
-
-            lag.cleargrads()
-            s.backward()
-            c = lag.count_violates()
-            if verbose:
-                print('score: {:.3f}, violated constraints: {}'.format(s.array[0], c))
-                print(seq)
-                for y_p in y:
-                    print(nussinov.dot_parenthesis(seq, y_p))
-                print()
+            y, _, c = lagrangian(seq, bpp, gamma, allowed_bp=allowed_bp, margin=margin)
             if c == 0:
                 break
-            optimizer.update()
-            lag.clip()
         
         return y
 
@@ -260,61 +244,106 @@ class IPknot(Decoder):
         return s.reshape(1,)
 
 
-class Lagrangian(link.Link):
-    def __init__(self, K, N, dtype=np.float32):
-        super(Lagrangian, self).__init__()
-        xp = self.xp
-        with self.init_scope():
-            self.mu = variable.Parameter(xp.zeros((N,), dtype=dtype))
-            self.xi = variable.Parameter(xp.zeros((K, K, N, N), dtype=dtype))
+class Lagrangian:
+    def __init__(self, K, N, lr=0.01, dtype=np.float32, xp=np, verbose=False):
+        self.xp, self.dtype = xp, dtype
+        self.K, self.N = K, N
+        self.lr = lr
+        self.verbose = verbose
+        self.c_sum, self.it = 0, 0
+        self.mu = xp.zeros((N,), dtype=dtype)
+        self.xi = xp.zeros((K, K, N, N), dtype=dtype)
+        self.nussinov = Nussinov()
 
 
-    def __call__(self):
-        K = self.xi.shape[0]
-        N = self.xi.shape[2]
-        xp = self.xp
-        dtype = self.xi.dtype
-        penalty = Variable(xp.zeros((K, N, N), dtype=dtype))
+    def calc_penalty(self):
+        xp, dtype = self.xp, self.dtype
+        K, N = self.K, self.N
 
+        penalty = xp.zeros((K, N, N), dtype=dtype)
         # constraint 1:
-        mu_temp = F.tile(self.mu, (K, N, 1))
-        penalty += - (mu_temp + F.transpose(mu_temp, axes=(0, 2, 1)))
-
+        mu_temp = xp.tile(self.mu, (K, N, 1))
+        penalty += - (mu_temp + xp.transpose(mu_temp, axes=(0, 2, 1)))
         # constraint 3:
-        z = xp.array([0], dtype=dtype)
         for p in range(K):
             for q in range(p):
                 for l in range(N):
                     for k in range(l):
-                        c = xp.zeros((K, N, N), dtype=np.bool)
-                        c[q, :k, k+1:l] = True
-                        c[q, k+1:l, l+1:] = True
-                        penalty += F.where(c, self.xi[p, q, k, l], z)
-                x = xp.zeros((K, N, N), dtype=dtype)
-                x[p, :, :] = -1
-                penalty += x * self.xi[:, q, :, :]
+                        penalty[q, :k, k+1:l] += self.xi[p, q, k, l]
+                        penalty[q, k+1:l, l+1:] += self.xi[p, q, k, l]
+                penalty[p, :, :] += -self.xi[p, q, :, :]
 
-        return penalty
-
-
-    def constants(self):
-        return F.sum(self.mu)
-
-
-    def mask(self, p, th=0.):
-        xp = self.xp
-        p.array = xp.where(p.array>th, p.array, xp.zeros_like(p.array))
-
-
-    def clip(self):
-        self.mask(self.mu)
-        self.mask(self.xi)
+        return penalty, xp.sum(self.mu)
 
     
-    def count_violates(self):
+    def update(self, y):
         xp = self.xp
-        c = xp.sum(self.mu.grad < 0) + xp.sum(self.xi.grad < 0)
+        K, N = self.K, self.N
+
+        ymat = xp.zeros((K, N, N), dtype=np.bool)
+        for p in range(K):
+            for i, j in y[p]:
+                ymat[p, i, j] = True
+        y = ymat
+
+        c = 0
+        # constraint 1
+        mu_grad = xp.ones_like(self.mu) - (y.sum(axis=(0, 2)) + y.sum(axis=(0, 1)))
+        c += xp.sum(mu_grad < 0)
+        # constraint 2
+        xi_grad = xp.zeros_like(self.xi)
+        for p in range(K):
+            for q in range(p):
+                for l in range(N):
+                    for k in range(l):
+                        xi_grad[p, q, k, l] += y[q, :k, k+1:l].sum()
+                        xi_grad[p, q, k, l] += y[q, k+1:l, l+1:].sum()
+                xi_grad[p, q, :, :] -= y[p, :, :]
+        c += xp.sum(xi_grad < 0)
+        self.c_sum += c
+        self.it += 1
+        lr = self.lr / np.sqrt(self.it)
+        #lr = self.lr / np.sqrt(1+self.c_sum)
+        #lr = self.lr / (1+self.c_sum)
+
+        # update by subgradients
+        self.mu = self.mu - lr * mu_grad
+        self.mu = xp.where(self.mu>0., self.mu, 0.)
+        self.xi = self.xi - lr * xi_grad
+        self.xi = xp.where(self.xi>0., self.xi, 0.)
+
+        if self.verbose:
+            print('violated constraints: {}, lr: {}'.format(c, lr))
+
         return c
+
+    
+    def __call__(self, seq, bpp, gamma, allowed_bp=None, margin=None):
+        K = self.K
+        nussinov = self.nussinov
+
+        # solve decomposed problem
+        penalty, constant = self.calc_penalty()
+        s = constant
+        y = []
+        for p in range(K):
+            margin_p = penalty[p] if margin is None else margin+penalty[p]
+            y_p = nussinov.decode(seq, bpp, gamma=gamma[p], allowed_bp=allowed_bp, margin=margin_p)
+            y.append(y_p)
+            s += nussinov.calc_score(seq, bpp, y_p, gamma=gamma[p], margin=margin_p)
+        del penalty
+        s = s[0]
+
+        c = self.update(y)
+
+        if self.verbose:
+            print('Score: {:.3f}'.format(s))
+            print(seq)
+            for y_p in y:
+                print(nussinov.dot_parenthesis(seq, y_p))
+            print()
+
+        return y, s, c
 
 
 if __name__ == '__main__':
