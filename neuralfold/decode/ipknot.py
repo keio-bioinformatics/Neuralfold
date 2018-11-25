@@ -8,7 +8,6 @@ from chainer import Variable, link, optimizers, variable
 from . import Decoder
 from .nussinov import Nussinov
 
-
 class IPknot(Decoder):
     def __init__(self, gamma=None, no_stacking=False, no_approx_thresholdcut=False,
                     cplex=False, cplex_path=None, gurobi=False, gurobi_path=None,
@@ -59,7 +58,7 @@ class IPknot(Decoder):
         return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
     
-    def decode_ip(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', disable_th=False):
+    def decode_ip(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', disable_th=False, enable_constraint3=False):
         '''IPknot-style decoding algorithm    
         '''
         gamma = self.gamma if gamma is None else gamma
@@ -136,14 +135,15 @@ class IPknot(Decoder):
                                     prob += pulp.lpSum(x[k][i1][j1] + x[k][i2][j2]) <= 1
 
         # constraints 3
-        for k2 in range(K):
-            for j2 in range(N):
-                for i2 in x_up_idx[k2][j2]:
-                    assert x[k2][i2][j2] is not None
-                    for k1 in range(k2):
-                        c1 = [x[k1][i1][j1] for i1 in range(0, i2-1) for j1 in x_do_idx[k1][i1] if i2 < j1 and j1 < j2]
-                        c2 = [x[k1][i1][j1] for j1 in range(j2+1, N) for i1 in x_up_idx[k1][j1] if i2 < i1 and i1 < j2]
-                        prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
+        if enable_constraint3:
+            for k2 in range(K):
+                for j2 in range(N):
+                    for i2 in x_up_idx[k2][j2]:
+                        assert x[k2][i2][j2] is not None
+                        for k1 in range(k2):
+                            c1 = [x[k1][i1][j1] for i1 in range(0, i2-1) for j1 in x_do_idx[k1][i1] if i2 < j1 and j1 < j2]
+                            c2 = [x[k1][i1][j1] for j1 in range(j2+1, N) for i1 in x_up_idx[k1][j1] if i2 < i1 and i1 < j2]
+                            prob += pulp.lpSum(c1+c2) >= x[k2][i2][j2]
 
         # constraints 4: stacking
         if self.stacking:
@@ -178,9 +178,8 @@ class IPknot(Decoder):
         return pair
 
 
-    def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', max_iter=1000):
-        verbose = False
-        lr0 = 0.5
+    def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', max_iter=1000,
+                    enable_constraint3=False, verbose=True, lr=0.01):
         gamma = self.gamma if gamma is None else gamma
         bpp = bpp.array if isinstance(bpp, Variable) else bpp
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
@@ -188,7 +187,7 @@ class IPknot(Decoder):
         dtype = bpp.dtype
         K = len(gamma)
         N = len(seq)
-        lagrangian = Lagrangian(K, N, lr0, dtype=dtype, xp=xp, verbose=verbose)
+        lagrangian = Lagrangian(K, N, lr, dtype=dtype, xp=xp, enable_constraint3=False, verbose=verbose)
 
         for it in range(max_iter):
             if verbose:
@@ -245,19 +244,26 @@ class IPknot(Decoder):
 
 
 class Lagrangian:
-    def __init__(self, K, N, lr=0.01, dtype=np.float32, xp=np, verbose=False):
-        self.xp, self.dtype = xp, dtype
-        self.K, self.N = K, N
+    def __init__(self, K, N, lr=0.01, momentum=0.9, dtype=np.float32, xp=np, 
+                    enable_constraint3=False, verbose=False):
+        self.K = K
+        self.N = N
+        self.xp = xp
         self.lr = lr
+        self.momentum = momentum
         self.verbose = verbose
+        self.enable_constraint3 = enable_constraint3
         self.c_sum, self.it = 0, 0
         self.mu = xp.zeros((N,), dtype=dtype)
-        self.xi = xp.zeros((K, K, N, N), dtype=dtype)
+        self.mu_v = xp.zeros((N,), dtype=dtype)
+        if self.enable_constraint3:
+            self.xi = xp.zeros((K, K, N, N), dtype=dtype)
+            self.xi_v = xp.zeros((K, K, N, N), dtype=dtype)
         self.nussinov = Nussinov()
 
 
     def calc_penalty(self):
-        xp, dtype = self.xp, self.dtype
+        xp, dtype = self.xp, self.mu.dtype
         K, N = self.K, self.N
 
         penalty = xp.zeros((K, N, N), dtype=dtype)
@@ -265,13 +271,14 @@ class Lagrangian:
         mu_temp = xp.tile(self.mu, (K, N, 1))
         penalty += - (mu_temp + xp.transpose(mu_temp, axes=(0, 2, 1)))
         # constraint 3:
-        for p in range(K):
-            for q in range(p):
-                for l in range(N):
-                    for k in range(l):
-                        penalty[q, :k, k+1:l] += self.xi[p, q, k, l]
-                        penalty[q, k+1:l, l+1:] += self.xi[p, q, k, l]
-                penalty[p, :, :] += -self.xi[p, q, :, :]
+        if self.enable_constraint3:
+            for p in range(K):
+                for q in range(p):
+                    for l in range(N):
+                        for k in range(l):
+                            penalty[q, :k, k+1:l] += self.xi[p, q, k, l]
+                            penalty[q, k+1:l, l+1:] += self.xi[p, q, k, l]
+                    penalty[p, :, :] += -self.xi[p, q, :, :]
 
         return penalty, xp.sum(self.mu)
 
@@ -291,26 +298,41 @@ class Lagrangian:
         mu_grad = xp.ones_like(self.mu) - (y.sum(axis=(0, 2)) + y.sum(axis=(0, 1)))
         c += xp.sum(mu_grad < 0)
         # constraint 2
-        xi_grad = xp.zeros_like(self.xi)
-        for p in range(K):
-            for q in range(p):
-                for l in range(N):
-                    for k in range(l):
-                        xi_grad[p, q, k, l] += y[q, :k, k+1:l].sum()
-                        xi_grad[p, q, k, l] += y[q, k+1:l, l+1:].sum()
-                xi_grad[p, q, :, :] -= y[p, :, :]
-        c += xp.sum(xi_grad < 0)
+        if self.enable_constraint3:
+            xi_grad = xp.zeros_like(self.xi)
+            for p in range(K):
+                for q in range(p):
+                    for l in range(N):
+                        for k in range(l):
+                            xi_grad[p, q, k, l] += y[q, :k, k+1:l].sum()
+                            xi_grad[p, q, k, l] += y[q, k+1:l, l+1:].sum()
+                    xi_grad[p, q, :, :] -= y[p, :, :]
+            c += xp.sum(xi_grad < 0)
         self.c_sum += c
         self.it += 1
-        lr = self.lr / np.sqrt(self.it)
-        #lr = self.lr / np.sqrt(1+self.c_sum)
-        #lr = self.lr / (1+self.c_sum)
+        if self.momentum is None:
+            lr = self.lr / self.it
+            #lr = self.lr / np.sqrt(1+self.c_sum)
+            #lr = self.lr / (1+self.c_sum)
 
-        # update by subgradients
-        self.mu = self.mu - lr * mu_grad
-        self.mu = xp.where(self.mu>0., self.mu, 0.)
-        self.xi = self.xi - lr * xi_grad
-        self.xi = xp.where(self.xi>0., self.xi, 0.)
+            # update by subgradients
+            self.mu = self.mu - lr * mu_grad
+            self.mu = xp.where(self.mu>0., self.mu, 0.)
+            if self.enable_constraint3:
+                self.xi = self.xi - lr * xi_grad
+                self.xi = xp.where(self.xi>0., self.xi, 0.)
+        else:
+            lr = self.lr
+            # update by subgradients
+            self.mu_v *= self.momentum
+            self.mu_v -= self.lr * mu_grad
+            self.mu += self.mu_v
+            self.mu = xp.where(self.mu>0., self.mu, 0.)
+            if self.enable_constraint3:
+                self.xi_v *= self.momentum
+                self.xi_v -= self.lr * xi_grad
+                self.xi += self.xi_v
+                self.xi = xp.where(self.xi>0., self.xi, 0.)
 
         if self.verbose:
             print('violated constraints: {}, lr: {}'.format(c, lr))
