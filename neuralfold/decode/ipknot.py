@@ -11,10 +11,16 @@ from .nussinov import Nussinov
 class IPknot(Decoder):
     def __init__(self, gamma=None, no_stacking=False, no_approx_thresholdcut=False,
                     cplex=False, cplex_path=None, gurobi=False, gurobi_path=None,
-                    dualdecomp=False):
+                    dualdecomp=False, enable_inter_level_pk=False, dualdecomp_verbose=False,
+                    dualdecomp_lr=0.01, dualdecomp_max_iter=100):
         self.gamma = gamma
         self.stacking = not no_stacking
         self.approx_cutoff = not no_approx_thresholdcut
+        self.enable_inter_level_pk = enable_inter_level_pk
+        self.verbose_dualdecomp = dualdecomp_verbose
+        self.lr = dualdecomp_lr
+        self.max_iter = dualdecomp_max_iter
+
         self.solver = None
         self.decode = self.decode_ip
         if cplex:
@@ -50,15 +56,29 @@ class IPknot(Decoder):
                         #help='approximate threshold cut',
                         help=argparse.SUPPRESS,
                         action='store_true')
+        group.add_argument('--enable-inter-level-pk',
+                        # help='enable constraints that ensure inter level pseudoknots'
+                        help=argparse.SUPPRESS,
+                        action='store_true')
+        group.add_argument('--dualdecomp-lr', type=float,
+                        help='learning rate for dual decompositon',
+                        default=0.01)
+        group.add_argument('--dualdecomp-max-iter', type=int,
+                        help='the maximum number of iteration of dual decomposition',
+                        default=100)
+        group.add_argument('--dualdecomp-verbose',
+                        help=argparse.SUPPRESS,
+                        action='store_true')
 
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('dualdecomp', 'cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'no_stacking', 'no_approx_thresholdcut')
+        hyper_params = ('dualdecomp', 'cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'no_stacking', 'no_approx_thresholdcut',
+                        'enable_inter_level_pk', 'dualdecomp_verbose', 'dualdecomp_lr', 'dualdecomp_max_iter')
         return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
     
-    def decode_ip(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', disable_th=False, enable_constraint3=False):
+    def decode_ip(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', disable_th=False):
         '''IPknot-style decoding algorithm    
         '''
         gamma = self.gamma if gamma is None else gamma
@@ -135,7 +155,7 @@ class IPknot(Decoder):
                                     prob += pulp.lpSum(x[k][i1][j1] + x[k][i2][j2]) <= 1
 
         # constraints 3
-        if enable_constraint3:
+        if self.enable_inter_level_pk:
             for k2 in range(K):
                 for j2 in range(N):
                     for i2 in x_up_idx[k2][j2]:
@@ -178,8 +198,7 @@ class IPknot(Decoder):
         return pair
 
 
-    def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical', max_iter=1000,
-                    enable_constraint3=False, verbose=True, lr=0.01):
+    def decode_dd(self, seq, bpp, gamma=None, margin=None, allowed_bp='canonical'):
         gamma = self.gamma if gamma is None else gamma
         bpp = bpp.array if isinstance(bpp, Variable) else bpp
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
@@ -187,10 +206,12 @@ class IPknot(Decoder):
         dtype = bpp.dtype
         K = len(gamma)
         N = len(seq)
-        lagrangian = Lagrangian(K, N, lr, dtype=dtype, xp=xp, enable_constraint3=False, verbose=verbose)
+        lagrangian = Lagrangian(K, N, self.lr, dtype=dtype, xp=xp, 
+                        enable_inter_level_pk=self.enable_inter_level_pk, 
+                        verbose=self.verbose_dualdecomp)
 
-        for it in range(max_iter):
-            if verbose:
+        for it in range(self.max_iter):
+            if self.verbose_dualdecomp:
                 print('iter:', it)
             y, _, c = lagrangian(seq, bpp, gamma, allowed_bp=allowed_bp, margin=margin)
             if c == 0:
@@ -245,18 +266,18 @@ class IPknot(Decoder):
 
 class Lagrangian:
     def __init__(self, K, N, lr=0.01, momentum=0.9, dtype=np.float32, xp=np, 
-                    enable_constraint3=False, verbose=False):
+                    enable_inter_level_pk=False, verbose=False):
         self.K = K
         self.N = N
         self.xp = xp
         self.lr = lr
         self.momentum = momentum
         self.verbose = verbose
-        self.enable_constraint3 = enable_constraint3
+        self.enable_inter_level_pk = enable_inter_level_pk
         self.c_sum, self.it = 0, 0
         self.mu = xp.zeros((N,), dtype=dtype)
         self.mu_v = xp.zeros((N,), dtype=dtype)
-        if self.enable_constraint3:
+        if self.enable_inter_level_pk:
             self.xi = xp.zeros((K, K, N, N), dtype=dtype)
             self.xi_v = xp.zeros((K, K, N, N), dtype=dtype)
         self.nussinov = Nussinov()
@@ -271,7 +292,7 @@ class Lagrangian:
         mu_temp = xp.tile(self.mu, (K, N, 1))
         penalty += - (mu_temp + xp.transpose(mu_temp, axes=(0, 2, 1)))
         # constraint 3:
-        if self.enable_constraint3:
+        if self.enable_inter_level_pk:
             for p in range(K):
                 for q in range(p):
                     for l in range(N):
@@ -298,7 +319,7 @@ class Lagrangian:
         mu_grad = xp.ones_like(self.mu) - (y.sum(axis=(0, 2)) + y.sum(axis=(0, 1)))
         c += xp.sum(mu_grad < 0)
         # constraint 2
-        if self.enable_constraint3:
+        if self.enable_inter_level_pk:
             xi_grad = xp.zeros_like(self.xi)
             for p in range(K):
                 for q in range(p):
@@ -318,7 +339,7 @@ class Lagrangian:
             # update by subgradients
             self.mu = self.mu - lr * mu_grad
             self.mu = xp.where(self.mu>0., self.mu, 0.)
-            if self.enable_constraint3:
+            if self.enable_inter_level_pk:
                 self.xi = self.xi - lr * xi_grad
                 self.xi = xp.where(self.xi>0., self.xi, 0.)
         else:
@@ -328,7 +349,7 @@ class Lagrangian:
             self.mu_v -= self.lr * mu_grad
             self.mu += self.mu_v
             self.mu = xp.where(self.mu>0., self.mu, 0.)
-            if self.enable_constraint3:
+            if self.enable_inter_level_pk:
                 self.xi_v *= self.momentum
                 self.xi_v -= self.lr * xi_grad
                 self.xi += self.xi_v
