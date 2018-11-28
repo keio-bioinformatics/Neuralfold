@@ -215,9 +215,19 @@ class IPknot(Decoder):
                 print('iter:', it)
             y, _, c = lagrangian(seq, bpp, gamma, allowed_bp=allowed_bp, margin=margin)
             if c == 0:
-                break
-        
-        return y
+                return y
+
+        y_str = ['.']*len(seq)
+        y_ret = []
+        for y_p in y:
+            y_p_ret = []
+            for i, j in y_p:
+                if y_str[i] != '.' and y_str[j] != '.':
+                    y_str[i], y_str[j] = '(', ')'
+                    y_p_ret.append((i, j))
+            y_ret.append(y_p)
+
+        return y_ret
 
 
     def calc_score_0(self, seq, bpp, pair, gamma=None, margin=None):
@@ -382,8 +392,8 @@ class Lagrangian:
         if self.verbose:
             print('Score: {:.3f}'.format(s))
             print(seq)
-            for y_p in y:
-                print(nussinov.dot_parenthesis(seq, y_p))
+            for p, y_p in enumerate(y):
+                print(nussinov.dot_parenthesis(seq, y_p, k=p))
             print()
 
         return y, s, c

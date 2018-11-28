@@ -59,7 +59,8 @@ class StructuredLoss(chainer.Chain):
                 print(seq)
                 print(self.decoder.dot_parenthesis(seq, true_structure))                
                 print(self.decoder.dot_parenthesis(seq, predicted_structure))
-                print('predicted score =', predicted_score.data[0], ', true score =', true_score.data[0])
+                print('predicted score = {:.3f}, true score = {:.3f}'
+                        .format(predicted_score.data[0], true_score.data[0]))
                 print()
 
             if self.compute_accuracy:
