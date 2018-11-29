@@ -9,12 +9,12 @@ from . import Decoder
 from .nussinov import Nussinov
 
 class IPknot(Decoder):
-    def __init__(self, gamma=None, no_stacking=False, no_approx_thresholdcut=False,
-                    cplex=False, cplex_path=None, gurobi=False, gurobi_path=None,
-                    dualdecomp=False, enable_inter_level_pk=False, dualdecomp_verbose=False,
+    def __init__(self, gamma=None, solver=None, solver_path=None, 
+                    enable_stacking=False, no_approx_thresholdcut=False,
+                    enable_inter_level_pk=False, dualdecomp_verbose=False,
                     dualdecomp_lr=0.01, dualdecomp_max_iter=100):
         self.gamma = gamma
-        self.stacking = not no_stacking
+        self.stacking = enable_stacking
         self.approx_cutoff = not no_approx_thresholdcut
         self.enable_inter_level_pk = enable_inter_level_pk
         self.verbose_dualdecomp = dualdecomp_verbose
@@ -23,35 +23,30 @@ class IPknot(Decoder):
 
         self.solver = None
         self.decode = self.decode_ip
-        if cplex:
-            self.solver = pulp.CPLEX_CMD(path=cplex_path, msg=False)
-        if gurobi:
-            self.solver = pulp.GUROBI_CMD(path=gurobi_path, msg=False)
-        if dualdecomp:
+        if solver == 'dualdecomp':
             self.decode = self.decode_dd
+        elif solver == 'cplex':
+            self.solver = pulp.CPLEX_CMD(path=solver_path, msg=False)
+        elif solver == 'gurobi':
+            self.solver = pulp.GUROBI_CMD(path=solver_path, msg=False)
+        elif solver_path is not None:
+            self.solver = pulp.COIN_CMD(path=solver_path, msg=False)
 
 
     @classmethod
     def add_args(cls, parser):
         group = parser.add_argument_group('Options for IPknot')
-        group.add_argument('--no-stacking', 
-                        help='no stacking constrint', 
+        group.add_argument('--solver', 
+                        help='IP solver to use for IPknot (default: dualdecomp)',
+                        choices=('dualdecomp', 'coin', 'cplex', 'gurobi'),
+                        type=str, default='dualdecomp')
+        group.add_argument('--solver-path',
+                        help='path of the solver executable',
+                        type=str, default=None, metavar='PATH')
+        group.add_argument('--enable-stacking', 
+                        #help='enable stacking constrint', 
+                        help=argparse.SUPPRESS,
                         action='store_true')
-        group.add_argument('--dualdecomp',
-                        help='use dual decomposition algorithm',
-                        action='store_true')
-        group.add_argument('--cplex',
-                        help='use CPLEX',
-                        action='store_true')
-        group.add_argument('--cplex-path',
-                        help='path of CPLEX executable',
-                        type=str, default=None)
-        group.add_argument('--gurobi',
-                        help='use Gurobi',
-                        action='store_true')
-        group.add_argument('--gurobi-path',
-                        help='path of Gurobi executable',
-                        type=str, default=None)
         group.add_argument('--no-approx-thresholdcut',
                         #help='approximate threshold cut',
                         help=argparse.SUPPRESS,
@@ -61,11 +56,11 @@ class IPknot(Decoder):
                         help=argparse.SUPPRESS,
                         action='store_true')
         group.add_argument('--dualdecomp-lr', type=float,
-                        help='learning rate for dual decompositon',
-                        default=0.01)
+                        help='learning rate for dual decompositon (default: 0.01)',
+                        default=0.01, metavar='LR')
         group.add_argument('--dualdecomp-max-iter', type=int,
-                        help='the maximum number of iteration of dual decomposition',
-                        default=100)
+                        help='the maximum number of iteration of dual decomposition (default: 100)',
+                        default=100, metavar='MAX_ITER')
         group.add_argument('--dualdecomp-verbose',
                         help=argparse.SUPPRESS,
                         action='store_true')
@@ -73,7 +68,7 @@ class IPknot(Decoder):
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('dualdecomp', 'cplex', 'cplex_path', 'gurobi', 'gurobi_path', 'no_stacking', 'no_approx_thresholdcut',
+        hyper_params = ('solver', 'solver-path', 'enable_stacking', 'no_approx_thresholdcut',
                         'enable_inter_level_pk', 'dualdecomp_verbose', 'dualdecomp_lr', 'dualdecomp_max_iter')
         return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 

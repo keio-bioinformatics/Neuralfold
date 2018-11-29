@@ -72,7 +72,7 @@ class Predict:
                                 help='Balance between sensitivity and specificity ',
                                 type=float, action='append')
         parser_pred.add_argument('-d', '--decode',
-                                help='Select a decoder for secondary structure prediction',
+                                help='Select a decoder for secondary structure prediction (default: nussinov)',
                                 choices=('nussinov', 'ipknot'),
                                 type=str, default='nussinov')
         Nussinov.add_args(parser_pred)

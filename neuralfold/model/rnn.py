@@ -1,8 +1,9 @@
 import pickle
+
 import chainer.functions as F
 import chainer.links as L
 import numpy as np
-from chainer import Chain, serializers
+from chainer import Chain, Variable, serializers
 
 
 class RNN(Chain):
@@ -41,6 +42,79 @@ class RNN(Chain):
                 h = F.sigmoid(self.L3_1(h))
         return h
 
+    def compute_inside(self, seq):
+        xp = self.xp
+        B, N, _ = seq.shape
+        M = self.n_featues
+
+        dp_in = Variable(xp.zeros((B, N, N, M), dtype=np.float32))
+        dp_diag_i = Variable(xp.zeros_like(dp_in)) # (B, N, N, M)
+        dp_diag_j = Variable(xp.zeros_like(dp_in)) # (B, N, N, M)
+        for l in range(1, N):
+            dp_diag_1 = F.diagonal(dp_in, offset=l-1, axis1=1, axis2=2)
+            v_1 = dp_diag_1[:, 1:].reshape(B, N-l, M)
+            v_2 = dp_diag_1[:, :-1].reshape(B, N-l, M)
+            if l >= 2:
+                dp_diag_2 = F.diagonal(dp_in, offset=l-2, axis1=1, axis2=2)
+                v_3 = dp_diag_2[:, 1:-1].reshape(B, N-l, M)
+            else:
+                v_3 = Variable(xp.zeros((B, N-l, M), dtype=dp_in.dtype))
+            v_k = dp_diag_i[:, :-l, :l, :] + dp_diag_j[:, l:, :l, :][:, :, ::-1, :] # (B, N-l, l, M)
+            #v_k = F.mean(v_k, axis=2) # (B, N-l, M)
+            v_k = F.logsumexp(v_k, axis=2) # (B, N-l, M)
+
+            x_i = seq[:, l:, :] # (B, N-l, 4)
+            x_j = seq[:, :-l, :] # (B, N-l, 4)
+            v = F.hstack((x_i, x_j, v_1, v_2, v_3, v_k))
+            dp_in_diag = self.forward_inside(v) # expect (B, N-l, M)
+
+            # F.diag(dp_in.diag, k=l) = dp_in_diag
+            dp_in += self.diagonalize(dp_in_diag, k=l) # (B, N, N, M)
+            # dp_diag_i[:, :-l, l, :] = dp_in_diag
+            # dp_diag_j[:, l:, l, :] = dp_in_diag
+            dp_in_diag.reshape(B, N-l, 1, M)
+            dp_diag_i += F.pad(dp_in_diag, ((0, 0), (0, l), (l, N-l-1), (0, 0)), mode='constant')
+            dp_diag_j += F.pad(dp_in_diag, ((0, 0), (l, 0), (l, N-l-1), (0, 0)), mode='constant')
+
+        return dp_in
+
+
+    def compute_outside(self, seq, dp_in):
+        xp = self.xp
+        B, N, _ = seq.shape
+        M = self.n_featues
+
+        dp_out = Variable(xp.zeros((B, N, N, M), dtype=np.float32))
+        dp_diag_i = Variable(xp.zeros_like(dp_out)) # (B, N, N, M)
+        dp_diag_j = Variable(xp.zeros_like(dp_out)) # (B, N, N, M)
+
+        # initialize
+
+        for l in reversed(range(0, N-1)):
+            dp_diag_1 = F.diagonal(dp_out, offset=l+1, axis1=1, axis2=2) # (B, N-(l+1), M)
+            v_1 = F.pad(dp_diag_1, ((0, 0), (0, 1), (0, 0)), mode='constant') # (B, N-l, M)
+            v_2 = F.pad(dp_diag_1, ((0, 0), (1, 0), (0, 0)), mode='constant') # (B, N-l, M)
+            if l+2 < N:
+                dp_diag_2 = F.diagonal(dp_out, offset=l+2, axis1=1, axis2=2) # (B, N-(l+2), M)
+                v_3 = F.pad(dp_diag_2, ((0, 0), (1, 1), (0, 0)), mode='constant') # (B, N-l, M)
+            else:
+                v_3 = Variable(xp.zeros((B, N-l, M), dtype=dp_out.dtype))
+            v_k_i = dp_diag_i[:, :-l, l, :] # (B, N-l, 1, M)
+            v_k_j = dp_diag_j[:, l:, l, :] # (B, N-l, 1, M)
+            v_k = F.logsumexp(F.concat((v_k_i, v_k_j), axis=2), axis=2) # (B, N-l, M)
+
+            x_i = seq[:, l:, :] # (B, N-l, 4)
+            x_j = seq[:, :-l, :] # (B, N-l, 4)
+            v = F.hstack((x_i, x_j, v_1, v_2, v_3, v_k))
+            dp_out_diag = self.forward_outside(v) # expect (B, N-l, M)
+
+            dp_out += self.diagonal(dp_out_diag, k=l) # (B, N, N, M)
+            # invalid
+            dp_diag_i[:, :-l, :l, :] ^= dp_out_diag + dp_diag_in_j[:, l:, :l, :][:, :, ::-1, :] # logsumexp
+            dp_diag_j[:, l:, :l, :][:, :, ::-1, :] ^= dp_out_diag + dp_diag_in_i[:, :-1, :l, :] # logsumexp
+
+        return dp_in
+
 
     def save_model(self, f):
         with open(f+'.pickle', 'wb') as fp:
@@ -74,4 +148,3 @@ class RNN(Chain):
         params = ('hidden_insideoutside', 'hidden2_insideoutside', 
                 'hidden_merge', 'hidden2_merge', 'feature')
         return {p: getattr(args, p, None) for p in params if getattr(args, p, None) is not None}
-
