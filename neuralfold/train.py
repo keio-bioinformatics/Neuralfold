@@ -100,8 +100,10 @@ class Train:
                 if self.compute_accuracy:
                     rep_name.append('val/main/f_val')
             trainer.extend(extensions.PrintReport(rep_name))
-            trainer.extend(extensions.PlotReport(['main/loss', 'val/main/loss'], x_key='epoch', file_name='loss.png'))
-            trainer.extend(extensions.PlotReport(['main/f_val', 'val/main/f_val'], x_key='epoch', file_name='accuracy.png'))
+            trainer.extend(extensions.PlotReport(['main/loss', 'val/main/loss'], file_name='loss.png'))
+            if self.compute_accuracy:
+                trainer.extend(extensions.PlotReport(['main/f_val', 'val/main/f_val'], 
+                                x_key='epoch', trigger=(1, 'epoch'), file_name='accuracy.png'))
             #trainer.extend(extensions.dump_graph('main/loss'))
 
 
@@ -118,21 +120,27 @@ class Train:
     def add_args(cls, parser):
         import argparse
         parser_training = parser.add_parser('train', help='training RNA secondary structures')
-        parser_training.add_argument('--gpu', help='set GPU ID (-1 for CPU)',
+        parser_training.add_argument('--gpu', 
+                                    help='set GPU ID (-1 for CPU)',
                                     type=int, default=-1)
-        parser_training.add_argument('--seed', help='set the random seed for reproducibility',
+        parser_training.add_argument('--seed', 
+                                    help='set the random seed for reproducibility',
                                     type=int, default=-1)
 
         # data
-        parser_training.add_argument('train_file', help='FASTA or BPseq file for training', nargs='+',
+        parser_training.add_argument('train_file', 
+                                    help='FASTA or BPseq file for training', nargs='+',
                                     type=argparse.FileType('r'))
-        parser_training.add_argument('-t', '--test_file', help='FASTA or BPseq file for test', nargs='+',
+        parser_training.add_argument('-t', '--test_file', 
+                                    help='FASTA or BPseq file for test', nargs='+',
                                     type=argparse.FileType('r'))
 
         # training files
-        parser_training.add_argument('--init-parameters', help='Initial parameter file',
+        parser_training.add_argument('--init-parameters', 
+                                    help='Initial parameter file',
                                     type=str)
-        parser_training.add_argument('-p','--parameters', help='Output parameter file',
+        parser_training.add_argument('-p','--parameters', 
+                                    help='Output parameter file',
                                     type=str, default="NEURALfold_parameters")
         parser_training.add_argument('-o', '--trainer-output', 
                                     help='Output directory during training',
@@ -141,13 +149,17 @@ class Train:
                                     type=str, default='')
 
         # training parameters
-        parser_training.add_argument('-v', '--verbose', help='verbose output',
+        parser_training.add_argument('-v', '--verbose', 
+                                    help='verbose output',
                                     action='store_true')
-        parser_training.add_argument('-i','--epochs', help='the number of epochs',
+        parser_training.add_argument('-i','--epochs', 
+                                    help='the number of epochs',
                                     type=int, default=1)
-        parser_training.add_argument('--batchsize', help='batch size', 
+        parser_training.add_argument('--batchsize', 
+                                    help='batch size', 
                                     type=int, default=1)
-        parser_training.add_argument('--compute-accuracy', help='compute accuracy during training',
+        parser_training.add_argument('--compute-accuracy', 
+                                    help='compute accuracy during training',
                                     action='store_true')
         StructuredLoss.add_args(parser_training)
 
