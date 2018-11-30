@@ -91,7 +91,7 @@ class Nussinov(Decoder):
             v_2 = dp_diag_1[:-1].reshape((N-l, 1))
             if l >= 2:
                 dp_diag_2 = xp.diag(dp, k=l-2)
-                v_3 = dp_diag_2[1:-1] + np.diag(s, k=l)
+                v_3 = dp_diag_2[1:-1] + xp.diag(s, k=l)
                 v_3[xp.diag(allowed_bp, k=l)==False] = -1e10
                 v_3 = v_3.reshape((N-l), 1)
             else:
@@ -120,7 +120,7 @@ class Nussinov(Decoder):
                 pair.append((i,j))
                 pair = self.traceback(tr, i+1, j-1, pair)
             elif tr[i, j] >= 0:
-                k = tr[i, j]+i
+                k = int(tr[i, j])+i
                 pair = self.traceback(tr, i, k, pair)
                 pair = self.traceback(tr, k+1, j, pair)
         return pair

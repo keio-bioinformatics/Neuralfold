@@ -200,7 +200,7 @@ class IPknot(Decoder):
         bpp = bpp.array if isinstance(bpp, Variable) else bpp
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
         dtype = bpp.dtype
-        xp = get_array_module(bpp)
+        xp = np #get_array_module(bpp)
         K = len(gamma)
         N = len(seq)
         lagrangian = Lagrangian(K, N, self.lr, dtype=dtype, xp=xp,
@@ -369,14 +369,14 @@ class Lagrangian:
 
         return c
 
-    
+
     def __call__(self, seq, bpp, gamma, allowed_bp=None, margin=None):
         K = self.K
         nussinov = self.nussinov
 
         # solve decomposed problem
         penalty, constant = self.calc_penalty()
-        s = constant
+        s = constant.reshape(1,)
         y = []
         for p in range(K):
             margin_p = penalty[p] if margin is None else margin+penalty[p]

@@ -42,7 +42,7 @@ class StructuredLoss(chainer.Chain):
         loss = 0
         pred_structure_set = []
         bpp = self.model.compute_bpp(seq_set)
-        xp = get_array_module(bpp)
+        xp = np #get_array_module(bpp)
         for k, (name, seq, true_structure) in enumerate(zip(name_set, seq_set, true_structure_set)):
             N = len(seq)
             #print(name, N, 'bp')
@@ -50,7 +50,7 @@ class StructuredLoss(chainer.Chain):
             for i, j in true_structure:
                 margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(seq, bpp[k].array[0:N, 0:N], margin=margin)
+            predicted_structure = self.decoder.decode(seq, to_cpu(bpp[k].array[0:N, 0:N]), margin=margin)
             predicted_score = self.decoder.calc_score(seq, bpp[k], pair=predicted_structure, margin=margin)
             predicted_score += self.pos_margin * len(true_structure)
             true_score = self.decoder.calc_score(seq, bpp[k], pair=true_structure)
