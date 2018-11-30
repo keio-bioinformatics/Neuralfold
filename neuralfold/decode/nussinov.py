@@ -1,8 +1,8 @@
 import argparse
 
-import cupy as cp
 import numpy as np
 from chainer import Variable
+from chainer.cuda import get_array_module
 
 from . import Decoder
 
@@ -42,8 +42,9 @@ class Nussinov(Decoder):
 
     def build_dp(self, seq, bpp, gamma, margin=None, allowed_bp=None):
         N = len(seq)
-        dp = np.zeros(bpp.shape, dtype=np.float32)
-        tr = np.zeros(bpp.shape, dtype=np.int)
+        xp = get_array_module(bpp)
+        dp = xp.zeros(bpp.shape, dtype=np.float32)
+        tr = xp.zeros(bpp.shape, dtype=np.int)
 
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
 
@@ -74,34 +75,35 @@ class Nussinov(Decoder):
 
     def build_dp_v(self, seq, bpp, gamma, margin=None, allowed_bp=None):
         N = len(seq)
-        dp = np.zeros_like(bpp)
-        dp_diag_i = np.zeros_like(bpp)
-        dp_diag_j = np.zeros_like(bpp)
-        tr = np.zeros(bpp.shape, dtype=np.int)
+        xp = get_array_module(bpp)
+        dp = xp.zeros_like(bpp)
+        dp_diag_i = xp.zeros_like(bpp)
+        dp_diag_j = xp.zeros_like(bpp)
+        tr = xp.zeros(bpp.shape, dtype=np.int)
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
         s = (gamma + 1) * bpp - 1
         if margin is not None:
             s += margin
 
         for l in range(1, N):
-            dp_diag_1 = np.diag(dp, k=l-1)
+            dp_diag_1 = xp.diag(dp, k=l-1)
             v_1 = dp_diag_1[1:].reshape((N-l, 1))
             v_2 = dp_diag_1[:-1].reshape((N-l, 1))
             if l >= 2:
-                dp_diag_2 = np.diag(dp, k=l-2)
+                dp_diag_2 = xp.diag(dp, k=l-2)
                 v_3 = dp_diag_2[1:-1] + np.diag(s, k=l)
-                v_3[np.diag(allowed_bp, k=l)==False] = -1e10
+                v_3[xp.diag(allowed_bp, k=l)==False] = -1e10
                 v_3 = v_3.reshape((N-l), 1)
             else:
-                v_3 = np.full((N-l,1), -1e10, dtype=bpp.dtype)
+                v_3 = xp.full((N-l,1), -1e10, dtype=bpp.dtype)
             v_k = dp_diag_i[:-l, :l] + dp_diag_j[l:, :l][:, ::-1]
 
-            v = np.hstack((v_3, v_2, v_1, v_k))
+            v = xp.hstack((v_3, v_2, v_1, v_k))
             dp_diag = v.max(axis=1)
             tr_diag = v.argmax(axis=1)-3
 
-            dp += np.diag(dp_diag, k=l) 
-            tr += np.diag(tr_diag, k=l)
+            dp += xp.diag(dp_diag, k=l) 
+            tr += xp.diag(tr_diag, k=l)
             dp_diag_i[:-l, l] = dp_diag
             dp_diag_j[l:, l] = dp_diag
 
@@ -124,10 +126,9 @@ class Nussinov(Decoder):
         return pair
 
     def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
+        xp = get_array_module(bpp)
         gamma = self.gamma if gamma is None else gamma
-        s = np.zeros((1,1), dtype=np.float32)
-        if isinstance(bpp, cp.ndarray):
-            s = cp.asarray(s)
+        s = xp.zeros((1,1), dtype=np.float32)
         if isinstance(bpp, Variable):
             s = bpp.xp.zeros((1,1), dtype=np.float32)
             s = Variable(s)

@@ -2,8 +2,8 @@ import argparse
 
 import chainer.functions as F
 import numpy as np
-import cupy as cp
 import pulp
+from chainer.cuda import to_cpu, get_array_module
 from chainer import Variable, link, optimizers, variable
 
 from . import Decoder
@@ -82,6 +82,7 @@ class IPknot(Decoder):
         N = len(seq)
         K = len(gamma)
         bpp = bpp.data if isinstance(bpp, Variable) else bpp
+        bpp = to_cpu(bpp)
 
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
         assert isinstance(allowed_bp, np.ndarray)
@@ -198,11 +199,11 @@ class IPknot(Decoder):
         gamma = self.gamma if gamma is None else gamma
         bpp = bpp.array if isinstance(bpp, Variable) else bpp
         allowed_bp = self.allowed_basepairs(seq, allowed_bp)
-        xp = np
         dtype = bpp.dtype
+        xp = get_array_module(bpp)
         K = len(gamma)
         N = len(seq)
-        lagrangian = Lagrangian(K, N, self.lr, dtype=dtype, xp=xp, 
+        lagrangian = Lagrangian(K, N, self.lr, dtype=dtype, xp=xp,
                         enable_inter_level_pk=self.enable_inter_level_pk, 
                         verbose=self.verbose_dualdecomp)
 
@@ -250,9 +251,8 @@ class IPknot(Decoder):
 
     def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
-        s = np.zeros((1,1), dtype=np.float32)
-        if isinstance(bpp, cp.ndarray):
-            s = cp.asarray(s)
+        xp = get_array_module(bpp)
+        s = xp.zeros((1,1), dtype=np.float32)
         if isinstance(bpp, Variable):
             s = bpp.xp.zeros((1,1), dtype=np.float32)
             s = Variable(s)
