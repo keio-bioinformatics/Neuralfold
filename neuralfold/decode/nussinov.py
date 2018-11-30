@@ -1,5 +1,6 @@
 import argparse
 
+import cupy as cp
 import numpy as np
 from chainer import Variable
 
@@ -125,7 +126,10 @@ class Nussinov(Decoder):
     def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
         s = np.zeros((1,1), dtype=np.float32)
+        if isinstance(bpp, cp.ndarray):
+            s = cp.asarray(s)
         if isinstance(bpp, Variable):
+            s = bpp.xp.zeros((1,1), dtype=np.float32)
             s = Variable(s)
 
         for i, j in pair:
