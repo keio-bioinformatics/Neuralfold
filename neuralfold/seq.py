@@ -1,3 +1,19 @@
+def load_seq_from_list(filename):
+    if not isinstance(filename, list):
+        filename = [filename]
+
+    file_list = []
+    for f in filename:
+        if isinstance(f, str):
+            f = open(f)
+        lst = f.readlines()
+        lst = [ l.rstrip() for l in lst]
+        file_list.extend(lst)
+        f.close()
+
+    return load_seq(file_list)
+
+
 def load_seq(filename):
     '''load sequences with their structures from file.
     FASTA format and BPSEQ format are supported.
@@ -15,6 +31,7 @@ def load_seq(filename):
         line = f.readline()
         f.seek(0)
         ret = load_fasta(f) if line[0] == '>' else load_bpseq(f)
+        f.close()
         name_set += ret[0]
         seq_set += ret[1]
         str_set += ret[2]

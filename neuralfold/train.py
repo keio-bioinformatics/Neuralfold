@@ -19,7 +19,7 @@ from .decode.nussinov import Nussinov
 from .model import load_model
 from .model.mlp import MLP
 from .model.rnn import RNN
-from .seq import load_seq
+from .seq import load_seq, load_seq_from_list
 from .structured_loss import StructuredLoss
 
 
@@ -33,9 +33,9 @@ class Train:
                 chainer.global_config.cudnn_deterministic = True
 
         # load sequences
-        self.name_set, self.seq_set, self.structure_set = load_seq(args.train_file)
+        self.name_set, self.seq_set, self.structure_set = load_seq_from_list(args.train_file)
         if args.test_file:
-            self.name_set_test, self.seq_set_test, self.structure_set_test = load_seq(args.test_file)
+            self.name_set_test, self.seq_set_test, self.structure_set_test = load_seq_from_list(args.test_file)
         else:
             self.seq_set_test = None
 
@@ -129,10 +129,10 @@ class Train:
 
         # data
         parser_training.add_argument('train_file', 
-                                    help='FASTA or BPseq file for training', nargs='+',
+                                    help='The list of FASTA or BPseq files for training', nargs='+',
                                     type=argparse.FileType('r'))
-        parser_training.add_argument('-t', '--test_file', 
-                                    help='FASTA or BPseq file for test', nargs='+',
+        parser_training.add_argument('-t', '--test-file', 
+                                    help='The list of FASTA or BPseq files for test', nargs='+',
                                     type=argparse.FileType('r'))
 
         # training files
