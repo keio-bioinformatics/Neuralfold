@@ -11,10 +11,11 @@ from .util import base_represent
 
 class MLP(Chain):
 
-    def __init__(self, neighbor=None, hidden1=None, hidden2=None):
+    def __init__(self, neighbor=None, hidden1=None, hidden2=None, mlp_dropout_rate=None):
         self.neighbor = neighbor
         self.hidden1 = hidden1
         self.hidden2 = hidden2
+        self.dropout_rate = mlp_dropout_rate
 
         super(MLP, self).__init__()
         with self.init_scope():
@@ -24,8 +25,12 @@ class MLP(Chain):
 
     def __call__(self, x):
         h = F.leaky_relu(self.L1(x))
+        if self.dropout_rate is not None:
+            h = F.dropout(h, ratio=self.dropout_rate)
         if self.hidden2:
             h = F.leaky_relu(self.L2(h))
+            if self.dropout_rate is not None:
+                h = F.dropout(h, ratio=self.dropout_rate)
         h = F.sigmoid(self.L3_1(h))
         # h = F.leaky_relu(self.L3_1(h))
         return h
@@ -42,19 +47,22 @@ class MLP(Chain):
     def add_args(cls, parser):
         group = parser.add_argument_group('Options for MLP model')
         group.add_argument('-hn1','--hidden1',
-                        help = 'hidden layer nodes for neighbor model',
+                        help='hidden layer nodes for neighbor model',
                         type=int, default=200)
         group.add_argument('-hn2','--hidden2',
-                        help = 'hidden layer nodes2 for neighbor model',
+                        help='hidden layer nodes2 for neighbor model',
                         type=int, default=50)
         group.add_argument('-n','--neighbor',
-                        help = 'length of neighbor bases to see',
+                        help='length of neighbor bases to see',
                         type=int, default=40)
+        group.add_argument('--mlp-dropout-rate',
+                        help='Dropout rate',
+                        type=float)
 
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('neighbor', 'hidden1', 'hidden2')
+        hyper_params = ('neighbor', 'hidden1', 'hidden2', 'mlp_dropout_rate')
         return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
 
