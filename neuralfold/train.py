@@ -17,6 +17,7 @@ from . import evaluate
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model import load_model
+from .model.cnn import CNN
 from .model.mlp import MLP
 from .model.rnn import RNN
 from .seq import load_seq, load_seq_from_list
@@ -166,10 +167,11 @@ class Train:
         # neural networks architecture
         parser_training.add_argument('-l','--learning-model',
                                     help='Select a learning model',
-                                    choices=('MLP', 'RNN'),
+                                    choices=('MLP', 'RNN', 'CNN'),
                                     type=str, default='MLP')
         MLP.add_args(parser_training)
         RNN.add_args(parser_training)
+        CNN.add_args(parser_training)
 
         # decoder option
         parser_training.add_argument('-g','--gamma',
