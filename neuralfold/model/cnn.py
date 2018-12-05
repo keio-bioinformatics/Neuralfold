@@ -11,7 +11,7 @@ from .util import base_represent
 
 class CNN(Chain):
 
-    def __init__(self, layers, channels, width, dropout_rate=None, no_resnet=False):
+    def __init__(self, layers, channels, width, dropout_rate=None, use_dilate=False, no_resnet=False):
         super(CNN, self).__init__()
 
         self.layers = layers
@@ -19,9 +19,13 @@ class CNN(Chain):
         self.width = width
         self.dropout_rate = dropout_rate
         self.resnet = not no_resnet
-
         for i in range(self.layers):
-            self.add_link("conv{}".format(i), L.Convolution1D(None, self.out_channels, self.width, pad=self.width//2))
+            if use_dilate:
+                conv = L.Convolution1D(None, self.out_channels, self.width,
+                                        dilate=2**i, pad=2**i*(self.width//2))
+            else:
+                conv = L.Convolution1D(None, self.out_channels, self.width, pad=self.width//2)
+            self.add_link("conv{}".format(i), conv)
         with self.init_scope():
             self.fc = L.Linear(None, 1)
 
@@ -64,11 +68,14 @@ class CNN(Chain):
         group.add_argument('--cnn-no-resnet',
                         help='disallow use of residual connections',
                         action='store_true')
+        group.add_argument('--cnn-use-dilate',
+                        help='use dilated convolutional networks',
+                        action='store_true')
 
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('width', 'layers', 'channels', 'dropout_rate', 'no_resnet')
+        hyper_params = ('width', 'layers', 'channels', 'dropout_rate', 'no_resnet', 'use_dilate')
         return {p: getattr(args, 'cnn_'+p, None) for p in hyper_params if getattr(args, 'cnn_'+p, None) is not None}
 
 
