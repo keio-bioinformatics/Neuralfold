@@ -11,7 +11,9 @@ from .util import base_represent
 
 class CNN(Chain):
 
-    def __init__(self, layers, channels, width, dropout_rate=None, use_dilate=False, no_resnet=False):
+    def __init__(self, layers, channels, width, 
+            dropout_rate=None, use_dilate=False, no_resnet=False,
+            hidden_nodes=128):
         super(CNN, self).__init__()
 
         self.layers = layers
@@ -19,6 +21,7 @@ class CNN(Chain):
         self.width = width
         self.dropout_rate = dropout_rate
         self.resnet = not no_resnet
+        self.hidden_nodes = hidden_nodes
         for i in range(self.layers):
             if use_dilate:
                 conv = L.Convolution1D(None, self.out_channels, self.width,
@@ -27,7 +30,8 @@ class CNN(Chain):
                 conv = L.Convolution1D(None, self.out_channels, self.width, pad=self.width//2)
             self.add_link("conv{}".format(i), conv)
         with self.init_scope():
-            self.fc = L.Linear(None, 1)
+            self.fc1 = L.Linear(None, self.hidden_nodes)
+            self.fc2 = L.Linear(None, 1)
 
 
     def forward(self, x):
@@ -71,11 +75,14 @@ class CNN(Chain):
         group.add_argument('--cnn-use-dilate',
                         help='use dilated convolutional networks',
                         action='store_true')
+        group.add_argument('--cnn-hidden-nodes',
+                        help='the number of hidden nodes in the fc layer',
+                        type=int, default=128)
 
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('width', 'layers', 'channels', 'dropout_rate', 'no_resnet', 'use_dilate')
+        hyper_params = ('width', 'layers', 'channels', 'dropout_rate', 'no_resnet', 'use_dilate', 'hidden_nodes')
         return {p: getattr(args, 'cnn_'+p, None) for p in hyper_params if getattr(args, 'cnn_'+p, None) is not None}
 
 
@@ -141,7 +148,9 @@ class CNN(Chain):
         for k in range(1, N):
             x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
             x = x.reshape(B*(N-k), -1)
-            y = F.sigmoid(self.fc(x))
+            print(x.shape)
+            x = F.leaky_relu(self.fc1(x))
+            y = F.sigmoid(self.fc2(x))
             y = y.reshape(B, N-k) 
             bpp += self.diagonalize(y, k=k) # (B, N, N)
 
