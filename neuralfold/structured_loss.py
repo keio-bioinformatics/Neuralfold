@@ -1,9 +1,12 @@
 import chainer
-import numpy as np
-from chainer.cuda import to_cpu, get_array_module
-from chainer import reporter, Variable
 import chainer.functions as F
+import numpy as np
+from chainer import Variable, reporter
+from chainer.cuda import get_array_module, to_cpu
+from joblib import Parallel, delayed
+
 from . import evaluate
+
 
 class StructuredLoss(chainer.Chain):
     def __init__(self, model, decoder, positive_margin, negative_margin,
@@ -38,19 +41,29 @@ class StructuredLoss(chainer.Chain):
 
     
     def __call__(self, name_set, seq_set, true_structure_set):
+        def func(decoder, seq, bpp, true_structure, pos_margin, neg_margin, id):
+            N = len(seq)
+            margin = np.full((N, N), neg_margin, dtype=np.float32)
+            for i, j in true_structure:
+                margin[i, j] -= pos_margin + neg_margin
+            return (id, decoder.decode(seq, bpp[0:N, 0:N], margin=margin), margin)
+
         B = len(seq_set)
         loss = 0
         pred_structure_set = []
         bpp = self.model.compute_bpp(seq_set)
-        xp = np #get_array_module(bpp)
-        for k, (name, seq, true_structure) in enumerate(zip(name_set, seq_set, true_structure_set)):
-            N = len(seq)
-            #print(name, N, 'bp')
-            margin = xp.full((N, N), self.neg_margin, dtype=np.float32)
-            for i, j in true_structure:
-                margin[i, j] -= self.pos_margin + self.neg_margin
 
-            predicted_structure = self.decoder.decode(seq, to_cpu(bpp[k].array[0:N, 0:N]), margin=margin)
+        jobs = [
+            delayed(func)(self.decoder, seq, to_cpu(bpp[k].array), 
+                    true_structure, self.pos_margin, self.neg_margin, k)
+                for k, (seq, true_structure) in enumerate(zip(seq_set, true_structure_set))
+        ]
+        r = sorted(Parallel(n_jobs=-1)(jobs))
+        predicted_structure_set = [ s[1] for s in r ]
+        margin_set = [ s[2] for s in r ]
+
+        for k, (name, seq, true_structure, predicted_structure, margin) in enumerate(zip(name_set, seq_set, true_structure_set, predicted_structure_set, margin_set)):
+            N = len(seq)
             predicted_score = self.decoder.calc_score(seq, bpp[k], pair=predicted_structure, margin=margin)
             predicted_score += self.pos_margin * len(true_structure)
             true_score = self.decoder.calc_score(seq, bpp[k], pair=true_structure)
