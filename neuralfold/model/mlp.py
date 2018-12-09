@@ -165,7 +165,8 @@ class MLP(Chain):
         elif k<0:
             x = F.hstack((x, xp.zeros((B, -k), dtype=x.dtype)))
         x = F.tile(x, N).reshape(B, N, N)
-        return x * xp.diag(xp.ones(N_orig), k=k)
+        cond = xp.diag(xp.ones(N_orig, dtype=np.bool), k=k)
+        return F.where(cond, x, xp.zeros((N, N), dtype=np.float32))
 
 
     def compute_bpp(self, seq):

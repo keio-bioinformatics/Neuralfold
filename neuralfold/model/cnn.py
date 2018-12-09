@@ -7,6 +7,7 @@ import numpy as np
 from chainer import Chain, Variable, serializers
 
 from .util import base_represent
+from memory_profiler import profile
 
 
 class CNN(Chain):
@@ -125,6 +126,41 @@ class CNN(Chain):
         return x
 
 
+    def make_input_vector_ij(self, v, i, j, bit_len=20, scale=1.5):
+        B, N, _ = v.shape
+        interval = j - i
+        v_l = v[:, :-interval, :] # (B, N-interval, K)
+        v_r = v[:, interval:, :]  # (B, N-interval, K)
+        v_int = self.make_interval_vector(interval, bit_len, scale) # (bit_len,)
+        v_int = self.xp.tile(v_int, (B, N-interval, 1)) # (B, N-interval, bit_len)
+        x = F.concat((v_l, v_r, v_int), axis=2) # (B, N-interval, K*2+bit_len)
+        return x[:, i, :]
+
+
+    def compute_bpp_0(self, seq):
+        xp = self.xp
+        seq_vec = self.make_onehot_vector(seq) # (B, N, 4)
+        B, N, _ = seq_vec.shape
+        seq_vec = xp.asarray(seq_vec)
+        seq_vec = self.forward(seq_vec) # (B, N, out_ch)
+
+        bpp = Variable(np.empty((B, 0, N), dtype=np.float32))
+        for i in range(N):
+            bpp_i = Variable(np.empty((B, 1, 0), dtype=np.float32))
+            for j in range(N):
+                if i<j:
+                    x = self.make_input_vector_ij(seq_vec, i, j)    
+                    x = F.leaky_relu(self.fc1(x))
+                    y_ij = F.sigmoid(self.fc2(x))
+                    y_ij = y_ij.reshape(B, 1, 1) 
+                else:  
+                    y_ij = Variable(np.zeros((B, 1, 1), dtype=np.float32))
+                bpp_i = F.concat((bpp_i, y_ij), axis=2)
+            bpp = F.concat((bpp, bpp_i), axis=1)
+        # print(bpp.shape) : (B, N, N)
+        return bpp
+
+
     def diagonalize(self, x, k=0):
         xp = self.xp
         B, N_orig = x.shape
@@ -134,7 +170,8 @@ class CNN(Chain):
         elif k<0:
             x = F.hstack((x, xp.zeros((B, -k), dtype=x.dtype)))
         x = F.tile(x, N).reshape(B, N, N)
-        return x * xp.diag(xp.ones(N_orig), k=k)
+        cond = xp.diag(xp.ones(N_orig, dtype=np.bool), k=k)
+        return F.where(cond, x, xp.zeros((N, N), dtype=np.float32))
 
 
     def compute_bpp(self, seq):
@@ -152,7 +189,7 @@ class CNN(Chain):
             y = F.sigmoid(self.fc2(x))
             y = y.reshape(B, N-k) 
             y = self.diagonalize(y, k=k)
-            cond = np.diag(np.ones((N-k,), dtype=np.bool), k=k)
+            cond = xp.diag(xp.ones(N-k, dtype=np.bool), k=k)
             bpp = F.where(cond, y, bpp)
 
         return bpp
