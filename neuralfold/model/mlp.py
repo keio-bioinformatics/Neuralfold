@@ -181,6 +181,8 @@ class MLP(Chain):
             x = xp.asarray(x)
             y = self(x) # (B*(N-k), 1)
             y = y.reshape(B, N-k) 
-            bpp += self.diagonalize(y, k=k) # (B, N, N)
+            y = self.diagonalize(y, k=k)
+            cond = np.diag(np.ones((N-k,), dtype=np.bool), k=k)
+            bpp = F.where(cond, y, bpp)
 
         return bpp

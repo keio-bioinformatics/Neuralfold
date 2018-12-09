@@ -148,10 +148,11 @@ class CNN(Chain):
         for k in range(1, N):
             x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
             x = x.reshape(B*(N-k), -1)
-            print(x.shape)
             x = F.leaky_relu(self.fc1(x))
             y = F.sigmoid(self.fc2(x))
             y = y.reshape(B, N-k) 
-            bpp += self.diagonalize(y, k=k) # (B, N, N)
+            y = self.diagonalize(y, k=k)
+            cond = np.diag(np.ones((N-k,), dtype=np.bool), k=k)
+            bpp = F.where(cond, y, bpp)
 
         return bpp
