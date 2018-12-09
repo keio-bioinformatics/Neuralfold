@@ -7,7 +7,6 @@ import numpy as np
 from chainer import Chain, Variable, serializers
 
 from .util import base_represent
-from memory_profiler import profile
 
 
 class CNN(Chain):
@@ -117,6 +116,18 @@ class CNN(Chain):
 
 
     def make_input_vector(self, v, interval, bit_len=20, scale=1.5):
+        B, N, _ = v.shape
+        v_l = v[:, :-interval, :] # (B, N-interval, K)
+        v_l = F.split_axis(v_l, 2, axis=2)[0]
+        v_r = v[:, interval:, :]  # (B, N-interval, K)
+        v_r = F.split_axis(v_r, 2, axis=2)[1]
+        v_int = self.make_interval_vector(interval, bit_len, scale) # (bit_len,)
+        v_int = self.xp.tile(v_int, (B, N-interval, 1)) # (B, N-interval, bit_len)
+        x = F.concat((v_l+v_r, v_int), axis=2) # (B, N-interval, K/2+bit_len)
+        return x
+
+
+    def make_input_vector_0(self, v, interval, bit_len=20, scale=1.5):
         B, N, _ = v.shape
         v_l = v[:, :-interval, :] # (B, N-interval, K)
         v_r = v[:, interval:, :]  # (B, N-interval, K)
