@@ -12,8 +12,8 @@ from .util import base_represent
 class CNN(Chain):
 
     def __init__(self, layers, channels, width, 
-            dropout_rate=None, use_dilate=False, no_resnet=False,
-            hidden_nodes=128):
+            dropout_rate=None, use_dilate=False, use_bn=False, 
+            no_resnet=False, hidden_nodes=128):
         super(CNN, self).__init__()
 
         self.layers = layers
@@ -22,6 +22,7 @@ class CNN(Chain):
         self.dropout_rate = dropout_rate
         self.resnet = not no_resnet
         self.hidden_nodes = hidden_nodes
+        self.use_bn = use_bn
         for i in range(self.layers):
             if use_dilate:
                 conv = L.Convolution1D(None, self.out_channels, self.width,
@@ -29,8 +30,12 @@ class CNN(Chain):
             else:
                 conv = L.Convolution1D(None, self.out_channels, self.width, pad=self.width//2)
             self.add_link("conv{}".format(i), conv)
+            if self.use_bn:
+                self.add_link("bn{}".format(i), L.BatchNormalization(self.out_channels))
         with self.init_scope():
             self.fc1 = L.Linear(None, self.hidden_nodes)
+            if self.use_bn:
+                self.bn_fc1 = L.BatchNormalization(self.hidden_nodes)
             self.fc2 = L.Linear(None, 1)
 
 
@@ -39,6 +44,8 @@ class CNN(Chain):
         for i in range(self.layers):
             h1 = h
             h = self['conv{}'.format(i)](h)
+            if self.use_bn:
+                h = self['bn{}'.format(i)](h)
             h = F.leaky_relu(h)
             if self.dropout_rate is not None:
                 h = F.dropout(h, ratio=self.dropout_rate)
@@ -72,6 +79,9 @@ class CNN(Chain):
         group.add_argument('--cnn-no-resnet',
                         help='disallow use of residual connections',
                         action='store_true')
+        group.add_argument('--cnn-use-bn',
+                        help='use batch normalization',
+                        action='store_true')
         group.add_argument('--cnn-use-dilate',
                         help='use dilated convolutional networks',
                         action='store_true')
@@ -82,7 +92,7 @@ class CNN(Chain):
 
     @classmethod    
     def parse_args(cls, args):
-        hyper_params = ('width', 'layers', 'channels', 'dropout_rate', 'no_resnet', 'use_dilate', 'hidden_nodes')
+        hyper_params = ('width', 'layers', 'channels', 'dropout_rate', 'no_resnet', 'use_bn', 'use_dilate', 'hidden_nodes')
         return {p: getattr(args, 'cnn_'+p, None) for p in hyper_params if getattr(args, 'cnn_'+p, None) is not None}
 
 
@@ -196,7 +206,10 @@ class CNN(Chain):
         for k in range(1, N):
             x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
             x = x.reshape(B*(N-k), -1)
-            x = F.leaky_relu(self.fc1(x))
+            if self.use_bn:
+                x = F.leaky_relu(self.bn_fc1(self.fc1(x)))
+            else:
+                x = F.leaky_relu(self.fc1(x))
             y = F.sigmoid(self.fc2(x))
             y = y.reshape(B, N-k) 
             y = self.diagonalize(y, k=k)
