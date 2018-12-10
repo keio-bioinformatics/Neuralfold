@@ -194,13 +194,14 @@ class CNN(Chain):
         cond = xp.diag(xp.ones(N_orig, dtype=np.bool), k=k)
         return F.where(cond, x, xp.zeros((N, N), dtype=np.float32))
 
-
+    #@profile
     def compute_bpp(self, seq):
         xp = self.xp
         seq_vec = self.make_onehot_vector(seq) # (B, N, 4)
         B, N, _ = seq_vec.shape
         seq_vec = xp.asarray(seq_vec)
         seq_vec = self.forward(seq_vec) # (B, N, out_ch)
+        allowed_bp = self.xp.asarray(self.allowed_basepairs(seq))
 
         bpp = Variable(xp.zeros((B, N, N), dtype=np.float32))
         for k in range(1, N):
@@ -214,6 +215,32 @@ class CNN(Chain):
             y = y.reshape(B, N-k) 
             y = self.diagonalize(y, k=k)
             cond = xp.diag(xp.ones(N-k, dtype=np.bool), k=k)
-            bpp = F.where(cond, y, bpp)
+            bpp = F.where(cond & allowed_bp, y, bpp)
 
         return bpp
+
+
+    def allowed_basepairs(self, seq, allowed_bp='canonical'):
+        B = len(seq)
+        N = max([len(s) for s in seq])
+
+        if allowed_bp is None:
+            return self.xp.ones((B, N, N), dtype=np.bool)
+
+        elif isinstance(allowed_bp, str) and allowed_bp == 'canonical':
+            allowed_bp = np.zeros((B, N, N), dtype=np.bool)
+            canonicals = {('A', 'U'), ('U', 'A'), ('G', 'C'), ('C', 'G'), ('G', 'U'), ('U', 'G')}
+            for k, s in enumerate(seq):
+                s = s.upper()
+                for j in range(len(s)):
+                    for i in range(j):
+                        if (s[i], s[j]) in canonicals and j-i>2:
+                            allowed_bp[k, i, j] = allowed_bp[k, j, i] = True
+            return allowed_bp
+
+        elif isinstance(allowed_bp, list):
+            a = np.zeros((B, N, N), dtype=np.bool)
+            for k, bp in enumerate(allowed_bp):
+                for i, j in bp:
+                    a[k, i, j] = a[k, j, i] = True
+            return a
