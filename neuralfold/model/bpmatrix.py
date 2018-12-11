@@ -9,16 +9,17 @@ class BatchedBPMatrix:
 
     @property
     def array(self):
+        xp = self.xp
         N = len(self.diagonals)
         B = self.diagonals[1].shape[0]
         dtype = self.diagonals[1].dtype
-        bpp = np.zeros((B, N, N), dtype=dtype)
+        bpp = xp.zeros((B, N, N), dtype=dtype)
         for k in range(1, N):
             x = self.diagonals[k].array
-            x = np.hstack((np.zeros((B, k), dtype=dtype), x))
-            x = np.tile(x, N).reshape(B, N, N)
-            cond = np.diag(np.ones(N-k, dtype=np.bool), k=k)
-            bpp = np.where(cond, x, bpp)
+            x = xp.hstack((xp.zeros((B, k), dtype=dtype), x))
+            x = xp.tile(x, N).reshape(B, N, N)
+            cond = xp.diag(xp.ones(N-k, dtype=np.bool), k=k)
+            bpp = xp.where(cond, x, bpp)
         return bpp
 
     @property
