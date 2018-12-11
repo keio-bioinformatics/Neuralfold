@@ -75,11 +75,11 @@ class Optimize:
             cnn_width = trial.suggest_int('cnn_width', 1, 4)*2+1
         cnn_layers = trial.suggest_int('cnn_layers', 1, 6)
         cnn_channels = 2*int(trial.suggest_loguniform('cnn_channels', 4/2, 256/2))
-        cnn_hidden_nodes = int(trial.suggest_uniform('cnn_hidden_nodes', 16, 256))
+        cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 16, 256))
         cnn_use_bn = trial.suggest_categorical('cnn_use_bn', [True, False])
         cnn_use_dropout = trial.suggest_categorical('cnn_use_dropout', [True, False])
         if cnn_use_dropout:
-            cnn_dropout_rate = trial.suggest_uniform('cnn_dropout_rate', 0.0, 0.5)
+            cnn_dropout_rate = trial.suggest_uniform('cnn_dropout_rate', 0.0, 0.25)
         else:
             cnn_dropout_rate = None
         pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
