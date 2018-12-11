@@ -6,6 +6,7 @@ import sys
 
 from .predict import Predict
 from .train import Train
+from .optimize import Optimize
 
 
 def main():
@@ -17,6 +18,7 @@ def main():
     parser.set_defaults(func = lambda args: parser.print_help())
     Train.add_args(subparser)
     Predict.add_args(subparser)
+    Optimize.add_args(subparser)
     args = parser.parse_args()
     args.func(args)
 

@@ -24,6 +24,7 @@ class CNN(Chain):
         self.resnet = not no_resnet
         self.hidden_nodes = hidden_nodes
         self.use_bn = use_bn
+        self.use_dilate = use_dilate
         for i in range(self.layers):
             if use_dilate:
                 conv = L.Convolution1D(None, self.out_channels, self.width,
