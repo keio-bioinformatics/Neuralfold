@@ -3,11 +3,14 @@ import argparse
 import chainer.functions as F
 import numpy as np
 import pulp
-from chainer.cuda import to_cpu, get_array_module
 from chainer import Variable, link, optimizers, variable
+from chainer.cuda import get_array_module, to_cpu
+
+from neuralfold.model.bpmatrix import BPMatrix
 
 from . import Decoder
 from .nussinov import Nussinov
+
 
 class IPknot(Decoder):
     def __init__(self, gamma=None, solver=None, solver_path=None, 
@@ -251,10 +254,9 @@ class IPknot(Decoder):
 
     def calc_score(self, seq, bpp, pair, gamma=None, margin=None):
         gamma = self.gamma if gamma is None else gamma
-        xp = get_array_module(bpp)
+        xp = bpp.xp if hasattr(bpp, 'xp') else get_array_module(bpp)
         s = xp.zeros((1,1), dtype=np.float32)
-        if isinstance(bpp, Variable):
-            s = bpp.xp.zeros((1,1), dtype=np.float32)
+        if isinstance(bpp, Variable) or isinstance(bpp, BPMatrix):
             s = Variable(s)
 
         if len(pair) == 0:

@@ -7,6 +7,7 @@ import numpy as np
 from chainer import Chain, Variable, serializers
 
 from .util import base_represent
+from .bpmatrix import BatchedBPMatrix, BPMatrix
 
 
 class CNN(Chain):
@@ -194,8 +195,7 @@ class CNN(Chain):
         cond = xp.diag(xp.ones(N_orig, dtype=np.bool), k=k)
         return F.where(cond, x, xp.zeros((N, N), dtype=np.float32))
 
-    #@profile
-    def compute_bpp(self, seq):
+    def compute_bpp_1(self, seq):
         xp = self.xp
         seq_vec = self.make_onehot_vector(seq) # (B, N, 4)
         B, N, _ = seq_vec.shape
@@ -218,6 +218,30 @@ class CNN(Chain):
             bpp = F.where(cond & allowed_bp, y, bpp)
 
         return bpp
+
+
+    #@profile
+    def compute_bpp(self, seq):
+        xp = self.xp
+        seq_vec = self.make_onehot_vector(seq) # (B, N, 4)
+        B, N, _ = seq_vec.shape
+        seq_vec = xp.asarray(seq_vec)
+        seq_vec = self.forward(seq_vec) # (B, N, out_ch)
+        #allowed_bp = self.xp.asarray(self.allowed_basepairs(seq))
+
+        bpp_diags = [None]
+        for k in range(1, N):
+            x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
+            x = x.reshape(B*(N-k), -1)
+            if self.use_bn:
+                x = F.leaky_relu(self.bn_fc1(self.fc1(x)))
+            else:
+                x = F.leaky_relu(self.fc1(x))
+            y = F.sigmoid(self.fc2(x))
+            y = y.reshape(B, N-k) 
+            bpp_diags.append(y)
+
+        return BatchedBPMatrix(bpp_diags)
 
 
     def allowed_basepairs(self, seq, allowed_bp='canonical'):

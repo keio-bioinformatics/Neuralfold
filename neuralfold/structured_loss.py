@@ -52,9 +52,10 @@ class StructuredLoss(chainer.Chain):
         loss = 0
         pred_structure_set = []
         bpp = self.model.compute_bpp(seq_set)
+        bpp_array = to_cpu(bpp.array)
 
         jobs = [
-            delayed(func)(self.decoder, seq, to_cpu(bpp[k].array), 
+            delayed(func)(self.decoder, seq, bpp_array[k], 
                     true_structure, self.pos_margin, self.neg_margin, k)
                 for k, (seq, true_structure) in enumerate(zip(seq_set, true_structure_set))
         ]
@@ -78,7 +79,7 @@ class StructuredLoss(chainer.Chain):
                 print()
 
             if self.compute_accuracy:
-                pred_structure = self.decoder.decode(seq, to_cpu(bpp[k].array[0:N, 0:N]))
+                pred_structure = self.decoder.decode(seq, to_cpu(bpp.array[k, 0:N, 0:N]))
                 pred_structure_set.append(pred_structure)
 
         loss = loss[0] / B
