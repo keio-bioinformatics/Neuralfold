@@ -68,15 +68,15 @@ class Optimize:
 
 
     def create_model(self, trial):
-        cnn_use_dilate = trial.suggest_categorical('cnn_use_dilate', [True, False])
+        cnn_use_dilate = True #trial.suggest_categorical('cnn_use_dilate', [True, False])
         if cnn_use_dilate:
             cnn_width = 3
         else:
             cnn_width = trial.suggest_int('cnn_width', 1, 4)*2+1
         cnn_layers = trial.suggest_int('cnn_layers', 1, 6)
-        cnn_channels = 2*int(trial.suggest_loguniform('cnn_channels', 4/2, 256/2))
-        cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 16, 256))
-        cnn_use_bn = trial.suggest_categorical('cnn_use_bn', [True, False])
+        cnn_channels = 2*int(trial.suggest_loguniform('cnn_channels', 32//2, 256//2))
+        cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 32, 256))
+        cnn_use_bn = True #trial.suggest_categorical('cnn_use_bn', [True, False])
         cnn_use_dropout = trial.suggest_categorical('cnn_use_dropout', [True, False])
         if cnn_use_dropout:
             cnn_dropout_rate = trial.suggest_uniform('cnn_dropout_rate', 0.0, 0.25)
@@ -100,10 +100,10 @@ class Optimize:
     def create_optimizer(self, trial, model):
         optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'MomentumSGD'])
         if optimizer_name == 'Adam':
-            adam_alpha = trial.suggest_loguniform('adam_alpha', 1e-5, 1e-1)
+            adam_alpha = trial.suggest_loguniform('adam_alpha', 1e-3, 1e-1)
             optimizer = chainer.optimizers.Adam(alpha=adam_alpha)
         else:
-            momentum_sgd_lr = trial.suggest_loguniform('momentum_sgd_lr', 1e-5, 1e-1)
+            momentum_sgd_lr = trial.suggest_loguniform('momentum_sgd_lr', 1e-3, 1e-1)
             optimizer = chainer.optimizers.MomentumSGD(lr=momentum_sgd_lr)
 
         weight_decay = trial.suggest_loguniform('weight_decay', 1e-10, 1e-3)
