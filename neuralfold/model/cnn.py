@@ -18,8 +18,8 @@ class CNN(Chain):
         super(CNN, self).__init__()
 
         self.layers = layers
-        self.out_channels = channels
-        self.width = width
+        self.out_channels = channels * 2
+        self.width = width * 2 + 1
         self.dropout_rate = dropout_rate
         self.resnet = not no_resnet
         self.hidden_nodes = hidden_nodes

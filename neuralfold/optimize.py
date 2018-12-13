@@ -70,11 +70,11 @@ class Optimize:
     def create_model(self, trial):
         cnn_use_dilate = True #trial.suggest_categorical('cnn_use_dilate', [True, False])
         if cnn_use_dilate:
-            cnn_width = 3
+            cnn_width = 1
         else:
-            cnn_width = trial.suggest_int('cnn_width', 1, 4)*2+1
+            cnn_width = trial.suggest_int('cnn_width', 1, 4)
         cnn_layers = trial.suggest_int('cnn_layers', 1, 6)
-        cnn_channels = 2*int(trial.suggest_loguniform('cnn_channels', 32//2, 256//2))
+        cnn_channels = int(trial.suggest_loguniform('cnn_channels', 32//2, 256//2))
         cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 32, 256))
         cnn_use_bn = True #trial.suggest_categorical('cnn_use_bn', [True, False])
         cnn_use_dropout = trial.suggest_categorical('cnn_use_dropout', [True, False])
