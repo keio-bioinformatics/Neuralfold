@@ -36,9 +36,9 @@ class Train:
         # load sequences
         self.name_set, self.seq_set, self.structure_set = load_seq_from_list(args.train_file)
         if args.test_file:
-            self.name_set_test, self.seq_set_test, self.structure_set_test = load_seq_from_list(args.test_file)
+            self.test_files = [list(zip(*load_seq_from_list(f))) for f in args.test_file]
         else:
-            self.seq_set_test = None
+            self.test_files = []
 
         # output
         self.param_file = args.parameters        
@@ -109,17 +109,21 @@ class Train:
             rep_name = ['epoch', 'elapsed_time', 'main/loss']
             if self.compute_accuracy:
                 rep_name.append('main/f_val')
-            if self.seq_set_test is not None:
-                valid_data = list(zip(self.name_set_test, self.seq_set_test, self.structure_set_test))
+            plot_loss_name = ['main/loss']
+            plot_f_val_name = ['main/f_val']
+            for i, valid_data in enumerate(self.test_files):
+                name = 'val' if i == 0 else 'val{}'.format(i)
                 valid_iter = iterators.SerialIterator(valid_data, self.batchsize, False, False)
-                trainer.extend(extensions.Evaluator(valid_iter, self.net, converter=converter), name='val')
-                rep_name.append('val/main/loss')
+                trainer.extend(extensions.Evaluator(valid_iter, self.net, converter=converter), name=name)
+                rep_name.append('{}/main/loss'.format(name))
+                plot_loss_name.append('{}/main/loss'.format(name))
                 if self.compute_accuracy:
-                    rep_name.append('val/main/f_val')
+                    rep_name.append('{}/main/f_val'.format(name))
+                    plot_f_val_name.append('{}/main/f_val'.format(name))
             trainer.extend(extensions.PrintReport(rep_name))
-            trainer.extend(extensions.PlotReport(['main/loss', 'val/main/loss'], file_name='loss.png'))
+            trainer.extend(extensions.PlotReport(plot_loss_name, file_name='loss.png'))
             if self.compute_accuracy:
-                trainer.extend(extensions.PlotReport(['main/f_val', 'val/main/f_val'], 
+                trainer.extend(extensions.PlotReport(plot_f_val_name, 
                                 x_key='epoch', trigger=(1, 'epoch'), file_name='accuracy.png'))
             #trainer.extend(extensions.dump_graph('main/loss'))
 
