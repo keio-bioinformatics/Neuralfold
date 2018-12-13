@@ -45,7 +45,6 @@ class Train:
         self.outdir = args.trainer_output
 
         # training parameters
-        self.lr = 0.01
         self.epochs = args.epochs
         self.batchsize = args.batchsize
         self.resume = args.resume
@@ -73,7 +72,7 @@ class Train:
         else:
             raise RuntimeError("Unknown decoder: {}".format(args.decode))
 
-        # loss function
+        # loss function setup
         if True:
             self.net = StructuredLoss(self.model, decoder, 
                                     compute_accuracy=self.compute_accuracy,
@@ -85,14 +84,24 @@ class Train:
                                     verbose=args.verbose, 
                                     **PiecewiseLoss.parse_args(args))
 
+        # optmizer setup
+        if args.optimizer == 'Adam':
+            self.optimizer = optimizers.Adam(alpha=args.adam_alpha)
+        elif args.optimizer == 'MomentumSGD':
+            self.optimizer = optimizers.MomentumSGD(lr=args.momentum_sgd_lr)
+        else:
+            raise 'unsupported optimizer'
+        self.optimizer.setup(self.net)
+        self.optimizer.add_hook(chainer.optimizer.WeightDecay(args.weight_decay))
+
 
     def run(self):
         converter = lambda batch, _: tuple(zip(*batch))
         training_data = list(zip(self.name_set, self.seq_set, self.structure_set))
         train_iter = iterators.SerialIterator(training_data, self.batchsize)
-        optimizer = optimizers.Adam(alpha=self.lr)
-        optimizer.setup(self.net)
-        updater = training.StandardUpdater(train_iter, optimizer, converter=converter)
+        # optimizer = optimizers.Adam(alpha=self.lr)
+        # self.optimizer.setup(self.net)
+        updater = training.StandardUpdater(train_iter, self.optimizer, converter=converter)
         trainer = training.Trainer(updater, (self.epochs, 'epoch'), out=self.outdir)
         if self.outdir:
             trainer.extend(extensions.LogReport())
@@ -169,6 +178,19 @@ class Train:
         parser_training.add_argument('--compute-accuracy', 
                                     help='compute accuracy during training',
                                     action='store_true')
+        parser_training.add_argument('--optimizer',
+                                    help='choose optimizer',
+                                    choices=('Adam', 'MomentumSGD'),
+                                    type=str, default='Adam')
+        parser_training.add_argument('--adam-alpha',
+                                    help='alpha for Adam optimizer (default: 0.001)',
+                                    type=float, default=0.001)
+        parser_training.add_argument('--momentum-sgd-lr', 
+                                    help='learning rate for MomentumSGD (default: 0.01)',
+                                    type=float, default=0.01)
+        parser_training.add_argument('--weight-decay',
+                                    help='weight decoy for optimizer (default: 1e-10)',
+                                    type=float, default=1e-10)
         StructuredLoss.add_args(parser_training)
 
         # neural networks architecture
