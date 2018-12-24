@@ -10,13 +10,29 @@ from .util import base_represent
 from .bpmatrix import BatchedBPMatrix, BPMatrix
 
 
+class WNLinear(L.Linear):
+    def __init__(self, *args, **kwargs):
+        super(WNLinear, self).__init__(*args, **kwargs)
+        self.add_param('g', self.W.data.shape[0])
+        norm = np.linalg.norm(self.W.data, axis=1)
+        self.g.data[...] = norm
+
+    def __call__(self, x):
+        norm = F.batch_l2_norm_squared(self.W) ** 0.5
+        norm_broadcasted = F.broadcast_to(
+            F.expand_dims(norm, 1), self.W.data.shape)
+        g_broadcasted = F.broadcast_to(
+            F.expand_dims(self.g, 1), self.W.data.shape)
+        return F.linear(x, g_broadcasted * self.W / norm_broadcasted, self.b)
+
+
 class WNConvolutionND(L.ConvolutionND):
     def __init__(self, *args, **kwargs):
         super(WNConvolutionND, self).__init__(*args, **kwargs)
-        self.add_param('g', self.W.data.shape[0])
-        norm = np.linalg.norm(self.W.data.reshape(
-            self.W.data.shape[0], -1), axis=1)
-        self.g.data[...] = norm
+        # self.add_param('g', self.W.data.shape[0])
+        # norm = np.linalg.norm(self.W.data.reshape(
+        #     self.W.data.shape[0], -1), axis=1)
+        # self.g.data[...] = norm
 
     def __call__(self, x):
         norm = F.batch_l2_norm_squared(self.W) ** 0.5
@@ -48,15 +64,17 @@ class DilatedBlock(Chain):
 class WNCNN(Chain):
 
     def __init__(self, layers, channels, width, 
-            dropout_rate=None, targets=10, hidden_nodes=128):
+            dropout_rate=None, targets=5, hidden_nodes=128):
         super(WNCNN, self).__init__()
 
         self.layers = layers
         self.out_channels = channels * 2
         self.width = width * 2 + 1
         self.dropout_rate = dropout_rate
-        self.n_targets = targets
+        self.n_targets = targets * 2
         self.hidden_nodes = hidden_nodes
+        self.bit_len = 8
+        self.scale = 2
         in_ch = 4
         for i in range(self.layers):
             conv = DilatedBlock(in_ch, self.out_channels, self.width, 
@@ -65,8 +83,8 @@ class WNCNN(Chain):
             in_ch += self.out_channels
         with self.init_scope():
             self.l = L.ConvolutionND(1, None, self.n_targets, 1)
-            self.fc1 = L.Linear(None, self.hidden_nodes)
-            self.fc2 = L.Linear(None, 1)
+            self.fc1 = WNLinear(self.n_targets // 2 + self.bit_len, self.hidden_nodes)
+            self.fc2 = WNLinear(self.hidden_nodes, 1)
 
 
     def forward(self, x):
@@ -75,7 +93,7 @@ class WNCNN(Chain):
         for i in range(self.layers):
             h = self['conv{}'.format(i)](hs)
             hs.append(h)
-        self.l(F.concat(hs, axis=1))
+        h = self.l(F.concat(hs, axis=1))
         return F.swapaxes(h, 1, 2)
 
 
@@ -144,12 +162,11 @@ class WNCNN(Chain):
         return self.xp.eye(bit_len, dtype=np.float32)[min(i, bit_len-1)]
 
 
-    def make_input_vector(self, v, interval, bit_len=20, scale=1.5):
+    def make_input_vector(self, v, interval, bit_len=8, scale=2):
         B, N, _ = v.shape
-        v_l = v[:, :-interval, :] # (B, N-interval, K)
-        v_l = F.split_axis(v_l, 2, axis=2)[0]
-        v_r = v[:, interval:, :]  # (B, N-interval, K)
-        v_r = F.split_axis(v_r, 2, axis=2)[1]
+        v_l, v_r = F.split_axis(v, 2, axis=2)
+        v_l = v_l[:, :-interval, :] # (B, N-interval, K)
+        v_r = v_r[:, interval:, :]  # (B, N-interval, K)
         v_int = self.make_interval_vector(interval, bit_len, scale) # (bit_len,)
         v_int = self.xp.tile(v_int, (B, N-interval, 1)) # (B, N-interval, bit_len)
         x = F.concat((v_l+v_r, v_int), axis=2) # (B, N-interval, K/2+bit_len)
@@ -167,7 +184,7 @@ class WNCNN(Chain):
 
         bpp_diags = [None]
         for k in range(1, N):
-            x = self.make_input_vector(seq_vec, k) # (B, N-k, *)
+            x = self.make_input_vector(seq_vec, k, self.bit_len, self.scale) # (B, N-k, *)
             x = x.reshape(B*(N-k), -1)
             x = F.leaky_relu(self.fc1(x))
             y = F.sigmoid(self.fc2(x))
