@@ -101,7 +101,7 @@ class Optimize:
     def create_model(self, trial):
         wncnn_layers = trial.suggest_int('wncnn_layers', 1, 6)
         wncnn_channels = int(trial.suggest_loguniform('wncnn_channels', 32, 256))
-        wncnn_targets = int(trial.suggset_loguniform('wncnn_targets', 4, 32))
+        wncnn_targets = int(trial.suggest_loguniform('wncnn_targets', 4, 32))
         wncnn_hidden_nodes = int(trial.suggest_loguniform('wncnn_hidden_nodes', 32, 128))
         wncnn_dropout_rate = trial.suggest_uniform('wncnn_dropout_rate', 0.0, 0.25)
         pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
