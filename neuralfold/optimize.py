@@ -19,6 +19,7 @@ from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model import load_model
 from .model.cnn import CNN
+from .model.wncnn import WNCNN
 from .model.mlp import MLP
 from .model.rnn import RNN
 from .piecewise_loss import PiecewiseLoss
@@ -66,29 +67,48 @@ class Optimize:
         else:
             raise RuntimeError("Unknown decoder: {}".format(args.decode))
 
+    # for CNN
+    # def create_model(self, trial):
+    #     cnn_use_dilate = True #trial.suggest_categorical('cnn_use_dilate', [True, False])
+    #     if cnn_use_dilate:
+    #         cnn_width = 1
+    #     else:
+    #         cnn_width = trial.suggest_int('cnn_width', 1, 4)
+    #     cnn_layers = trial.suggest_int('cnn_layers', 1, 6)
+    #     cnn_channels = int(trial.suggest_loguniform('cnn_channels', 32//2, 256//2))
+    #     cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 32, 256))
+    #     cnn_use_bn = True #trial.suggest_categorical('cnn_use_bn', [True, False])
+    #     cnn_use_dropout = trial.suggest_categorical('cnn_use_dropout', [True, False])
+    #     if cnn_use_dropout:
+    #         cnn_dropout_rate = trial.suggest_uniform('cnn_dropout_rate', 0.0, 0.25)
+    #     else:
+    #         cnn_dropout_rate = None
+    #     pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
+    #     neg_margin = trial.suggest_uniform('neg_margin', 0.0, pos_margin)
 
+    #     model = CNN(layers=cnn_layers, channels=cnn_channels, 
+    #                 width=cnn_width, hidden_nodes=cnn_hidden_nodes,
+    #                 dropout_rate=cnn_dropout_rate, 
+    #                 use_dilate=cnn_use_dilate, use_bn=cnn_use_bn)
+
+    #     net = StructuredLoss(model, self.decoder, 
+    #                             compute_accuracy=self.compute_accuracy,
+    #                             positive_margin=pos_margin, negative_margin=neg_margin)
+
+    #     return net
+
+    # for Weight Normalizaion CNN
     def create_model(self, trial):
-        cnn_use_dilate = True #trial.suggest_categorical('cnn_use_dilate', [True, False])
-        if cnn_use_dilate:
-            cnn_width = 1
-        else:
-            cnn_width = trial.suggest_int('cnn_width', 1, 4)
-        cnn_layers = trial.suggest_int('cnn_layers', 1, 6)
-        cnn_channels = int(trial.suggest_loguniform('cnn_channels', 32//2, 256//2))
-        cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 32, 256))
-        cnn_use_bn = True #trial.suggest_categorical('cnn_use_bn', [True, False])
-        cnn_use_dropout = trial.suggest_categorical('cnn_use_dropout', [True, False])
-        if cnn_use_dropout:
-            cnn_dropout_rate = trial.suggest_uniform('cnn_dropout_rate', 0.0, 0.25)
-        else:
-            cnn_dropout_rate = None
+        wncnn_layers = trial.suggest_int('wncnn_layers', 1, 6)
+        wncnn_channels = int(trial.suggest_loguniform('wncnn_channels', 32//2, 256//2))
+        wncnn_hidden_nodes = int(trial.suggest_loguniform('wncnn_hidden_nodes', 32, 256))
+        wncnn_dropout_rate = trial.suggest_uniform('wncnn_dropout_rate', 0.0, 0.25)
         pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
         neg_margin = trial.suggest_uniform('neg_margin', 0.0, pos_margin)
 
-        model = CNN(layers=cnn_layers, channels=cnn_channels, 
-                    width=cnn_width, hidden_nodes=cnn_hidden_nodes,
-                    dropout_rate=cnn_dropout_rate, 
-                    use_dilate=cnn_use_dilate, use_bn=cnn_use_bn)
+        model = WNCNN(layers=wncnn_layers, channels=wncnn_channels, 
+                    width=1, hidden_nodes=wncnn_hidden_nodes,
+                    dropout_rate=wncnn_dropout_rate)
 
         net = StructuredLoss(model, self.decoder, 
                                 compute_accuracy=self.compute_accuracy,
