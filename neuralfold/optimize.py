@@ -20,6 +20,7 @@ from .decode.nussinov import Nussinov
 from .model import load_model
 from .model.cnn import CNN
 from .model.wncnn import WNCNN
+from .model.wncnn2d import WNCNN2D
 from .model.mlp import MLP
 from .model.rnn import RNN
 from .piecewise_loss import PiecewiseLoss
@@ -99,17 +100,17 @@ class Optimize:
 
     # for Weight Normalizaion CNN
     def create_model(self, trial):
-        wncnn_layers = trial.suggest_int('wncnn_layers', 1, 6)
-        wncnn_channels = int(trial.suggest_loguniform('wncnn_channels', 32, 256))
-        wncnn_targets = int(trial.suggest_loguniform('wncnn_targets', 4, 32))
-        wncnn_hidden_nodes = int(trial.suggest_loguniform('wncnn_hidden_nodes', 32, 128))
-        wncnn_dropout_rate = trial.suggest_uniform('wncnn_dropout_rate', 0.0, 0.25)
+        wncnn2d_layers = trial.suggest_int('wncnn2d_layers', 1, 6)
+        wncnn2d_channels = int(trial.suggest_loguniform('wncnn2d_channels', 4, 32))
+        wncnn2d_targets = int(trial.suggest_loguniform('wncnn2d_targets', 4, 32))
+        wncnn2d_hidden_nodes = int(trial.suggest_loguniform('wncnn2d_hidden_nodes', 32, 128))
+        wncnn2d_dropout_rate = trial.suggest_uniform('wncnn2d_dropout_rate', 0.0, 0.25)
         pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
         neg_margin = trial.suggest_uniform('neg_margin', 0.0, pos_margin)
 
-        model = WNCNN(layers=wncnn_layers, channels=wncnn_channels, 
-                    width=1, targets=wncnn_targets, hidden_nodes=wncnn_hidden_nodes,
-                    dropout_rate=wncnn_dropout_rate)
+        model = WNCNN2D(layers=wncnn2d_layers, channels=wncnn2d_channels, 
+                    kernel=1, targets=wncnn2d_targets, hidden_nodes=wncnn2d_hidden_nodes,
+                    dropout_rate=wncnn2d_dropout_rate)
 
         net = StructuredLoss(model, self.decoder, 
                                 compute_accuracy=self.compute_accuracy,
