@@ -101,12 +101,12 @@ class Optimize:
     # for Weight Normalizaion CNN
     def create_model(self, trial):
         wncnn2d_layers = trial.suggest_int('wncnn2d_layers', 1, 6)
-        wncnn2d_channels = int(trial.suggest_loguniform('wncnn2d_channels', 4, 32))
-        wncnn2d_targets = int(trial.suggest_loguniform('wncnn2d_targets', 4, 32))
-        wncnn2d_hidden_nodes = int(trial.suggest_loguniform('wncnn2d_hidden_nodes', 32, 128))
-        wncnn2d_dropout_rate = trial.suggest_uniform('wncnn2d_dropout_rate', 0.0, 0.25)
-        pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
-        neg_margin = trial.suggest_uniform('neg_margin', 0.0, pos_margin)
+        wncnn2d_channels = int(trial.suggest_loguniform('wncnn2d_channels', 4, 64))
+        wncnn2d_targets = 8 # int(trial.suggest_loguniform('wncnn2d_targets', 4, 32))
+        wncnn2d_hidden_nodes = 64 # int(trial.suggest_loguniform('wncnn2d_hidden_nodes', 32, 128))
+        wncnn2d_dropout_rate = trial.suggest_uniform('wncnn2d_dropout_rate', 0.0, 0.5)
+        pos_margin = 0.2 #trial.suggest_uniform('pos_margin', 0.0, 0.5)
+        neg_margin = 0.1 #trial.suggest_uniform('neg_margin', 0.0, pos_margin)
 
         model = WNCNN2D(layers=wncnn2d_layers, channels=wncnn2d_channels, 
                     kernel=1, targets=wncnn2d_targets, hidden_nodes=wncnn2d_hidden_nodes,
@@ -120,17 +120,19 @@ class Optimize:
     
 
     def create_optimizer(self, trial, model):
-        optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'MomentumSGD'])
-        if optimizer_name == 'Adam':
-            adam_alpha = trial.suggest_loguniform('adam_alpha', 1e-3, 1e-1)
-            optimizer = chainer.optimizers.Adam(alpha=adam_alpha)
-        else:
-            momentum_sgd_lr = trial.suggest_loguniform('momentum_sgd_lr', 1e-3, 1e-1)
-            optimizer = chainer.optimizers.MomentumSGD(lr=momentum_sgd_lr)
-
-        weight_decay = trial.suggest_loguniform('weight_decay', 1e-10, 1e-3)
+        # optimizer_name = trial.suggest_categorical('optimizer', ['Adam', 'MomentumSGD'])
+        # if optimizer_name == 'Adam':
+        #     adam_alpha = trial.suggest_loguniform('adam_alpha', 1e-3, 1e-1)
+        #     optimizer = chainer.optimizers.Adam(alpha=adam_alpha)
+        # else:
+        #     momentum_sgd_lr = trial.suggest_loguniform('momentum_sgd_lr', 1e-3, 1e-1)
+        #     optimizer = chainer.optimizers.MomentumSGD(lr=momentum_sgd_lr)
+        #
+        # weight_decay = trial.suggest_loguniform('weight_decay', 1e-10, 1e-3)
+        optimizer = chainer.optimizers.Adam(alpha=0.001)
+        #weight_decay = 1e-10
         optimizer.setup(model)
-        optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
+        #optimizer.add_hook(chainer.optimizer.WeightDecay(weight_decay))
         return optimizer
 
 
