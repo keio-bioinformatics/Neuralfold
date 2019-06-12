@@ -11,7 +11,9 @@ from .optimize import Optimize
 
 def main():
     parser = ArgumentParser(
-        description='NeuralFold: Direct inference of base-pairing probabilities with neural networks improves RNA secondary structure prediction with pseudoknots.',
+        description='NeuralFold: Direct inference of base-pairing probabilities '
+            'with neural networks improves RNA secondary structure prediction with pseudoknots.',
+        fromfile_prefix_chars='@',
         add_help=True,
     )
     subparser = parser.add_subparsers(title='Sub-commands')

@@ -9,14 +9,18 @@ from . import evaluate
 from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model import load_model
+from .model.cnn import CNN
 from .model.mlp import MLP
+from .model.rnn import RNN
+from .model.wncnn import WNCNN
+from .model.wncnn2d import WNCNN2D
 from .seq import load_seq
 
 
 class Predict:
     def __init__(self, args):
         self.name_set, self.seq_set, self.structure_set = load_seq(args.seq_file)
-        self.model = load_model(args.parameters)
+        self.model = load_model(args.parameters, args)
         if args.gpu >= 0:
             self.model.to_gpu(args.gpu)
 
@@ -38,7 +42,8 @@ class Predict:
             print(name)
             with chainer.using_config('train', False), chainer.using_config('enable_backprop', False):
                 predicted_BP = self.model.compute_bpp([seq])
-            predicted_structure = self.decoder.decode(seq, to_cpu(predicted_BP[0].array[0:N, 0:N]))
+            predicted_BP = to_cpu(predicted_BP.array)
+            predicted_structure = self.decoder.decode(seq, predicted_BP[0][0:N, 0:N])
 
             print(seq)
             print(self.decoder.dot_parenthesis(seq, predicted_structure))
@@ -68,6 +73,17 @@ class Predict:
                                 type=str, default="NEURALfold_parameters")
         # parser_pred.add_argument('-bp','--bpseq', help='Use bpseq format',
         #                         action='store_true')
+
+        parser_pred.add_argument('-l','--learning-model',
+                                    help='Select a learning model [MLP (default), RNN, CNN, WNCNN, WNCNN2D]',
+                                    choices=('MLP', 'RNN', 'CNN', 'WNCNN', 'WNCNN2D'),
+                                    type=str, default='MLP')
+        MLP.add_args(parser_pred)
+        RNN.add_args(parser_pred)
+        CNN.add_args(parser_pred)
+        WNCNN.add_args(parser_pred)        
+        WNCNN2D.add_args(parser_pred)        
+
         parser_pred.add_argument('-g','--gamma',
                                 help='Balance between sensitivity and specificity ',
                                 type=float, action='append')

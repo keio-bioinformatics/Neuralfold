@@ -1,27 +1,36 @@
 import math
-import pickle
 
 import chainer.functions as F
 import chainer.links as L
 import numpy as np
 from chainer import Chain, Variable, serializers
+from .base import BaseModel
 
-from .util import base_represent
+class MLP(BaseModel):
+    hyper_params = ('neighbor', 'hidden1', 'hidden2', 'mlp_dropout_rate')
+    params_prefix = 'mlp'
 
 
-class MLP(Chain):
-
-    def __init__(self, neighbor=None, hidden1=None, hidden2=None, mlp_dropout_rate=None):
+    def __init__(self, neighbor=None, hidden1=None, hidden2=None, dropout_rate=None):
         self.neighbor = neighbor
         self.hidden1 = hidden1
         self.hidden2 = hidden2
-        self.dropout_rate = mlp_dropout_rate
+        self.dropout_rate = dropout_rate
+
+        self.config = {
+            '--learning-model': 'MLP',
+            '--mlp-hidden1': hidden1,
+            '--mlp-hidden2': hidden2,
+            '--mlp-neighbor': neighbor,
+            '--mlp-dropout-rate': dropout_rate
+        }
 
         super(MLP, self).__init__()
         with self.init_scope():
             self.L1 = L.Linear(None, self.hidden1)
             self.L2 = L.Linear(None , self.hidden2)
             self.L3_1 = L.Linear(None, 1)
+
 
     def __call__(self, x):
         h = F.leaky_relu(self.L1(x))
@@ -36,34 +45,21 @@ class MLP(Chain):
         return h
 
 
-    def save_model(self, f):
-        with open(f+'.pickle', 'wb') as fp:
-            pickle.dump(self.__class__.__name__, fp)
-            pickle.dump(self.parse_args(self), fp)
-        serializers.save_npz(f+'.npz', self)
-
-
     @classmethod
     def add_args(cls, parser):
         group = parser.add_argument_group('Options for MLP model')
-        group.add_argument('-hn1','--hidden1',
+        group.add_argument('--mlp-hidden1',
                         help='hidden layer nodes for neighbor model',
                         type=int, default=200)
-        group.add_argument('-hn2','--hidden2',
+        group.add_argument('--mlp-hidden2',
                         help='hidden layer nodes2 for neighbor model',
                         type=int, default=50)
-        group.add_argument('-n','--neighbor',
+        group.add_argument('--mlp-neighbor',
                         help='length of neighbor bases to see',
                         type=int, default=40)
         group.add_argument('--mlp-dropout-rate',
                         help='Dropout rate',
                         type=float)
-
-
-    @classmethod    
-    def parse_args(cls, args):
-        hyper_params = ('neighbor', 'hidden1', 'hidden2', 'mlp_dropout_rate')
-        return {p: getattr(args, p, None) for p in hyper_params if getattr(args, p, None) is not None}
 
 
     def base_onehot(self, base):

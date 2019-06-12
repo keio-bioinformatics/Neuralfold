@@ -1,13 +1,11 @@
-import math
-import pickle
-
 import chainer.functions as F
 import chainer.links as L
 import numpy as np
 from chainer import Chain, Variable, serializers
 
-from .util import base_represent
+from .base import BaseModel
 from .bpmatrix import BatchedBPMatrix, BPMatrix
+
 
 class WNLinear(L.Linear):
     def __init__(self, *args, **kwargs):
@@ -60,7 +58,9 @@ class DilatedBlock(Chain):
         return h
 
 
-class WNCNN2D(Chain):
+class WNCNN2D(BaseModel):
+    hyper_params = ('targets', 'kernel', 'layers', 'channels', 'dropout_rate', 'hidden_nodes')
+    params_prefix = 'wncnn2d'
 
     def __init__(self, layers, channels, kernel, 
             dropout_rate=None, targets=5, hidden_nodes=128):
@@ -75,6 +75,17 @@ class WNCNN2D(Chain):
         self.bit_len = 8
         self.scale = 2
         in_ch = 4*2+self.bit_len
+
+        self.config = {
+            '--learning-model': 'WNCNN2D',
+            '--wncnn2d-targets': targets,
+            '--wncnn2d-kernel': kernel,
+            '--wncnn2d-layers': layers,
+            '--wncnn2d-channels': channels,
+            '--wncnn2d-dropout-rate': dropout_rate,
+            '--wncnn2d-hidden-nodes': hidden_nodes
+        }
+
         for i in range(self.layers):
             conv = DilatedBlock(in_ch, self.out_channels, self.kernel, 
                                 dilate=2**i, do_rate=self.dropout_rate, ndim=2)
@@ -88,13 +99,6 @@ class WNCNN2D(Chain):
 
     def forward(self, x):
         return self.compute_bpp(x)
-
-
-    def save_model(self, f):
-        with open(f+'.pickle', 'wb') as fp:
-            pickle.dump(self.__class__.__name__, fp)
-            pickle.dump(self.parse_args(self), fp)
-        serializers.save_npz(f+'.npz', self)
 
 
     @classmethod
@@ -118,41 +122,6 @@ class WNCNN2D(Chain):
         group.add_argument('--wncnn2d-hidden-nodes',
                         help='the number of hidden nodes in the fc layer',
                         type=int, default=128)
-
-
-    @classmethod    
-    def parse_args(cls, args):
-        hyper_params = ('targets', 'kernel', 'layers', 'channels', 'dropout_rate', 'hidden_nodes')
-        return {p: getattr(args, 'wncnn2d_'+p, None) for p in hyper_params if getattr(args, 'wncnn2d_'+p, None) is not None}
-
-
-    def base_onehot(self, base):
-        if base in ['A' ,'a']:
-            return np.array([1,0,0,0] , dtype=np.float32)
-        elif base in ['U' ,'u']:
-            return np.array([0,1,0,0] , dtype=np.float32)
-        elif base in ['G' ,'g']:
-            return np.array([0,0,1,0] , dtype=np.float32)
-        elif base in ['C' ,'c']:
-            return np.array([0,0,0,1] , dtype=np.float32)
-        else:
-            return np.array([0,0,0,0] , dtype=np.float32)
-
-
-    def make_onehot_vector(self, seq):
-        B = len(seq) # batch size
-        M = 4 # the number of bases
-        N = max([len(s) for s in seq]) # the maximum length of sequences
-        seq_vec = np.zeros((B, N, M), dtype=np.float32)
-        for k, s in enumerate(seq):
-            for i, base in enumerate(s):
-                seq_vec[k, i, :] = self.base_onehot(base)
-        return seq_vec
-
-
-    def make_interval_vector(self, interval, bit_len, scale):
-        i = int(math.log(interval, scale)+1.) if interval > 0 else 0
-        return np.eye(bit_len, dtype=np.float32)[min(i, bit_len-1)]
 
 
     def make_input_tensor(self, seq, bit_len=8, scale=2):

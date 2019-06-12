@@ -31,7 +31,7 @@ class Train:
         if args.seed >= 0:
             random.seed(args.seed)
             np.random.seed(args.seed)
-            if chainer.backends.cuda.available:
+            if chainer.backends.cuda.available and args.gpu >= 0:
                 chainer.backends.cuda.cupy.random.seed(args.seed)
                 chainer.global_config.cudnn_deterministic = True
 
@@ -54,15 +54,15 @@ class Train:
 
         # model setup
         if args.init_parameters:
-            self.model = load_model(args.init_parameters)
+            self.model = load_model(args.init_parameters, args)
         else:
             try:
                 klass = globals()[args.learning_model]
                 self.model = klass(**klass.parse_args(args))
-                if args.gpu >= 0:
-                    self.model.to_gpu(args.gpu)
             except KeyError:
                 raise RuntimeError("{} is unknown model class.".format(args.learning_model))
+        if args.gpu >= 0:
+            self.model.to_gpu(args.gpu)
 
         # decoder setup
         if args.decode == 'ipknot':
@@ -173,19 +173,19 @@ class Train:
 
         # training parameters
         parser_training.add_argument('-v', '--verbose', 
-                                    help='verbose output',
+                                    help='enable verbose output',
                                     action='store_true')
         parser_training.add_argument('-i','--epochs', 
-                                    help='the number of epochs',
+                                    help='the number of epochs (default: 1)',
                                     type=int, default=1)
         parser_training.add_argument('--batchsize', 
-                                    help='batch size', 
+                                    help='batch size (default: 1)', 
                                     type=int, default=1)
         parser_training.add_argument('--compute-accuracy', 
                                     help='compute accuracy during training',
                                     action='store_true')
         parser_training.add_argument('--optimizer',
-                                    help='choose optimizer',
+                                    help='choose optimizer [Adam (default) or MomentumSGD]',
                                     choices=('Adam', 'MomentumSGD'),
                                     type=str, default='Adam')
         parser_training.add_argument('--adam-alpha',
@@ -201,7 +201,7 @@ class Train:
 
         # neural networks architecture
         parser_training.add_argument('-l','--learning-model',
-                                    help='Select a learning model',
+                                    help='Select a learning model [MLP (default), RNN, CNN, WNCNN, WNCNN2D]',
                                     choices=('MLP', 'RNN', 'CNN', 'WNCNN', 'WNCNN2D'),
                                     type=str, default='MLP')
         MLP.add_args(parser_training)
@@ -212,10 +212,10 @@ class Train:
 
         # decoder option
         parser_training.add_argument('-g','--gamma',
-                                    help='balance between the sensitivity and specificity',
+                                    help='balance between the sensitivity and specificity (default: 4.0)',
                                     type=float, action='append')
         parser_training.add_argument('-d', '--decode',
-                                    help='Select a decoder for secondary structure prediction',
+                                    help='Select a decoder for secondary structure prediction [nussinov (default), ipknot]',
                                     choices=('nussinov', 'ipknot'),
                                     type=str, default='nussinov')
         IPknot.add_args(parser_training)

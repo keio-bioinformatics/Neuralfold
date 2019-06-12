@@ -1,12 +1,9 @@
-import math
-import pickle
-
 import chainer.functions as F
 import chainer.links as L
 import numpy as np
 from chainer import Chain, Variable, serializers
 
-from .util import base_represent
+from .base import BaseModel
 from .bpmatrix import BatchedBPMatrix, BPMatrix
 
 
@@ -61,7 +58,10 @@ class DilatedBlock(Chain):
         return h
 
 
-class WNCNN(Chain):
+class WNCNN(BaseModel):
+    hyper_params = ('targets', 'width', 'layers', 'channels', 'dropout_rate', 'hidden_nodes')
+    params_prefix = 'wncnn'
+
 
     def __init__(self, layers, channels, width, 
             dropout_rate=None, targets=5, hidden_nodes=128):
@@ -76,6 +76,17 @@ class WNCNN(Chain):
         self.bit_len = 8
         self.scale = 2
         in_ch = 4
+
+        self.config = {
+            '--learning-model': 'WNCNN',
+            '--wncnn-targets': targets,
+            '--wncnn-width': width,
+            '--wncnn-layers': layers,
+            '--wncnn-channels': channels,
+            '--wncnn-dropout-rate': dropout_rate,
+            '--wncnn-hidden-nodes': hidden_nodes
+        }
+
         for i in range(self.layers):
             conv = DilatedBlock(in_ch, self.out_channels, self.width, 
                                 dilate=2**i, do_rate=self.dropout_rate)
@@ -95,13 +106,6 @@ class WNCNN(Chain):
             hs.append(h)
         h = self.l(F.concat(hs, axis=1))
         return F.swapaxes(h, 1, 2)
-
-
-    def save_model(self, f):
-        with open(f+'.pickle', 'wb') as fp:
-            pickle.dump(self.__class__.__name__, fp)
-            pickle.dump(self.parse_args(self), fp)
-        serializers.save_npz(f+'.npz', self)
 
 
     @classmethod
@@ -125,52 +129,6 @@ class WNCNN(Chain):
         group.add_argument('--wncnn-hidden-nodes',
                         help='the number of hidden nodes in the fc layer',
                         type=int, default=128)
-
-
-    @classmethod    
-    def parse_args(cls, args):
-        hyper_params = ('targets', 'width', 'layers', 'channels', 'dropout_rate', 'hidden_nodes')
-        return {p: getattr(args, 'wncnn_'+p, None) for p in hyper_params if getattr(args, 'wncnn_'+p, None) is not None}
-
-
-    def base_onehot(self, base):
-        if base in ['A' ,'a']:
-            return np.array([1,0,0,0] , dtype=np.float32)
-        elif base in ['U' ,'u']:
-            return np.array([0,1,0,0] , dtype=np.float32)
-        elif base in ['G' ,'g']:
-            return np.array([0,0,1,0] , dtype=np.float32)
-        elif base in ['C' ,'c']:
-            return np.array([0,0,0,1] , dtype=np.float32)
-        else:
-            return np.array([0,0,0,0] , dtype=np.float32)
-
-
-    def make_onehot_vector(self, seq):
-        B = len(seq) # batch size
-        M = 4 # the number of bases
-        N = max([len(s) for s in seq]) # the maximum length of sequences
-        seq_vec = np.zeros((B, N, M), dtype=np.float32)
-        for k, s in enumerate(seq):
-            for i, base in enumerate(s):
-                seq_vec[k, i, :] = self.base_onehot(base)
-        return seq_vec
-
-
-    def make_interval_vector(self, interval, bit_len, scale):
-        i = int(math.log(interval, scale)+1.)
-        return self.xp.eye(bit_len, dtype=np.float32)[min(i, bit_len-1)]
-
-
-    def make_input_vector(self, v, interval, bit_len=8, scale=2):
-        B, N, _ = v.shape
-        v_l, v_r = F.split_axis(v, 2, axis=2)
-        v_l = v_l[:, :-interval, :] # (B, N-interval, K)
-        v_r = v_r[:, interval:, :]  # (B, N-interval, K)
-        v_int = self.make_interval_vector(interval, bit_len, scale) # (bit_len,)
-        v_int = self.xp.tile(v_int, (B, N-interval, 1)) # (B, N-interval, bit_len)
-        x = F.concat((v_l+v_r, v_int), axis=2) # (B, N-interval, K/2+bit_len)
-        return x
 
 
     #@profile

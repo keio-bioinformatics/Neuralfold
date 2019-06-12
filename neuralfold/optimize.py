@@ -33,7 +33,7 @@ class Optimize:
         if args.seed >= 0:
             random.seed(args.seed)
             np.random.seed(args.seed)
-            if chainer.backends.cuda.available:
+            if chainer.backends.cuda.available and args.gpu >= 0:
                 chainer.backends.cuda.cupy.random.seed(args.seed)
                 chainer.global_config.cudnn_deterministic = True
 
