@@ -69,54 +69,57 @@ class Optimize:
             raise RuntimeError("Unknown decoder: {}".format(args.decode))
 
     # for CNN
-    # def create_model(self, trial):
-    #     cnn_use_dilate = True #trial.suggest_categorical('cnn_use_dilate', [True, False])
-    #     if cnn_use_dilate:
-    #         cnn_width = 1
-    #     else:
-    #         cnn_width = trial.suggest_int('cnn_width', 1, 4)
-    #     cnn_layers = trial.suggest_int('cnn_layers', 1, 6)
-    #     cnn_channels = int(trial.suggest_loguniform('cnn_channels', 32//2, 256//2))
-    #     cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 32, 256))
-    #     cnn_use_bn = True #trial.suggest_categorical('cnn_use_bn', [True, False])
-    #     cnn_use_dropout = trial.suggest_categorical('cnn_use_dropout', [True, False])
-    #     if cnn_use_dropout:
-    #         cnn_dropout_rate = trial.suggest_uniform('cnn_dropout_rate', 0.0, 0.25)
-    #     else:
-    #         cnn_dropout_rate = None
-    #     pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
-    #     neg_margin = trial.suggest_uniform('neg_margin', 0.0, pos_margin)
+    def create_model(self, trial):
+        cnn_use_dilate = False # trial.suggest_categorical('cnn_use_dilate', [True, False])
+        if cnn_use_dilate:
+            cnn_width = 1
+        else:
+            cnn_width = trial.suggest_int('cnn_width', 1, 4)
+        cnn_layers = trial.suggest_int('cnn_layers', 1, 6)
+        cnn_channels = int(trial.suggest_loguniform('cnn_channels', 32//2, 256//2))
+        cnn_hidden_nodes = int(trial.suggest_loguniform('cnn_hidden_nodes', 32, 256))
+        cnn_use_bn = True #trial.suggest_categorical('cnn_use_bn', [True, False])
+        cnn_use_dropout = trial.suggest_categorical('cnn_use_dropout', [True, False])
+        if cnn_use_dropout:
+            cnn_dropout_rate = trial.suggest_uniform('cnn_dropout_rate', 0.0, 0.5)
+        else:
+            cnn_dropout_rate = None
+        pos_margin = trial.suggest_uniform('pos_margin', 0.0, 0.5)
+        neg_margin = trial.suggest_uniform('neg_margin', 0.0, pos_margin)
 
-    #     model = CNN(layers=cnn_layers, channels=cnn_channels, 
-    #                 width=cnn_width, hidden_nodes=cnn_hidden_nodes,
-    #                 dropout_rate=cnn_dropout_rate, 
-    #                 use_dilate=cnn_use_dilate, use_bn=cnn_use_bn)
+        model = CNN(layers=cnn_layers, channels=cnn_channels, 
+                    width=cnn_width, hidden_nodes=cnn_hidden_nodes,
+                    dropout_rate=cnn_dropout_rate, 
+                    use_dilate=cnn_use_dilate, use_bn=cnn_use_bn)
+
+        net = StructuredLoss(model, self.decoder, 
+                                compute_accuracy=self.compute_accuracy,
+                                positive_margin=pos_margin, negative_margin=neg_margin)
+
+        if self.gpu >= 0:
+            net.to_gpu(self.gpu)
+
+        return net
+
+    # for Weight Normalizaion CNN
+    # def create_model(self, trial):
+    #     wncnn2d_layers = trial.suggest_int('wncnn2d_layers', 1, 6)
+    #     wncnn2d_channels = int(trial.suggest_loguniform('wncnn2d_channels', 4, 64))
+    #     wncnn2d_targets = 8 # int(trial.suggest_loguniform('wncnn2d_targets', 4, 32))
+    #     wncnn2d_hidden_nodes = 64 # int(trial.suggest_loguniform('wncnn2d_hidden_nodes', 32, 128))
+    #     wncnn2d_dropout_rate = trial.suggest_uniform('wncnn2d_dropout_rate', 0.0, 0.5)
+    #     pos_margin = 0.2 #trial.suggest_uniform('pos_margin', 0.0, 0.5)
+    #     neg_margin = 0.1 #trial.suggest_uniform('neg_margin', 0.0, pos_margin)
+
+    #     model = WNCNN2D(layers=wncnn2d_layers, channels=wncnn2d_channels, 
+    #                 kernel=1, targets=wncnn2d_targets, hidden_nodes=wncnn2d_hidden_nodes,
+    #                 dropout_rate=wncnn2d_dropout_rate)
 
     #     net = StructuredLoss(model, self.decoder, 
     #                             compute_accuracy=self.compute_accuracy,
     #                             positive_margin=pos_margin, negative_margin=neg_margin)
 
     #     return net
-
-    # for Weight Normalizaion CNN
-    def create_model(self, trial):
-        wncnn2d_layers = trial.suggest_int('wncnn2d_layers', 1, 6)
-        wncnn2d_channels = int(trial.suggest_loguniform('wncnn2d_channels', 4, 64))
-        wncnn2d_targets = 8 # int(trial.suggest_loguniform('wncnn2d_targets', 4, 32))
-        wncnn2d_hidden_nodes = 64 # int(trial.suggest_loguniform('wncnn2d_hidden_nodes', 32, 128))
-        wncnn2d_dropout_rate = trial.suggest_uniform('wncnn2d_dropout_rate', 0.0, 0.5)
-        pos_margin = 0.2 #trial.suggest_uniform('pos_margin', 0.0, 0.5)
-        neg_margin = 0.1 #trial.suggest_uniform('neg_margin', 0.0, pos_margin)
-
-        model = WNCNN2D(layers=wncnn2d_layers, channels=wncnn2d_channels, 
-                    kernel=1, targets=wncnn2d_targets, hidden_nodes=wncnn2d_hidden_nodes,
-                    dropout_rate=wncnn2d_dropout_rate)
-
-        net = StructuredLoss(model, self.decoder, 
-                                compute_accuracy=self.compute_accuracy,
-                                positive_margin=pos_margin, negative_margin=neg_margin)
-
-        return net
     
 
     def create_optimizer(self, trial, model):

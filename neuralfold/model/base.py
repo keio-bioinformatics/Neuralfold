@@ -52,7 +52,7 @@ class BaseModel(Chain):
         for k, s in enumerate(seq):
             for i, base in enumerate(s):
                 seq_vec[k, i, :] = self.base_onehot(base)
-        return seq_vec
+        return seq_vec # (B, N, M)
 
 
     def make_interval_vector(self, interval, bit_len, scale):
@@ -68,7 +68,7 @@ class BaseModel(Chain):
         v_r = F.split_axis(v_r, 2, axis=2)[1]
         v_int = self.make_interval_vector(interval, bit_len, scale) # (bit_len,)
         v_int = self.xp.tile(v_int, (B, N-interval, 1)) # (B, N-interval, bit_len)
-        x = F.concat((v_l+v_r, v_int), axis=2) # (B, N-interval, K/2+bit_len)
+        x = F.concat((v_l, v_r, v_int), axis=2) # (B, N-interval, K/2+bit_len)
         return x
 
 

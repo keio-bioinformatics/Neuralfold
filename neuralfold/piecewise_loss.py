@@ -23,7 +23,8 @@ class PiecewiseLoss(chainer.Chain):
 
     @classmethod
     def add_args(cls, parser):
-        group = parser.add_argument_group('Options for piece-wise loss function')
+        # group = parser.add_argument_group('Options for piece-wise loss function')
+        pass
 
 
     @classmethod    
@@ -37,28 +38,21 @@ class PiecewiseLoss(chainer.Chain):
             N = len(seq)
             return (id, decoder.decode(seq, bpp[0:N, 0:N]))
 
-        B = len(seq_set)
-        loss = 0.
-        bpp = self.model.compute_bpp(seq_set)
-
+        bpp = self.model.compute_bpp(seq_set).array
+        t = self.xp.zeros(bpp.shape, dtype=np.int32)
         for k, (seq, true_structure) in enumerate(zip(seq_set, true_structure_set)):
             N = len(seq)
-            t = self.xp.zeros((N, N), dtype=np.int32)
+            t[k, :, N:] = -1
+            t[k, N:, :] = -1
             for i, j in true_structure:
-                t[i, j] = 1
-            l = 0
-            for j in range(N):
-                for i in range(j):
-                    l += F.sigmoid_cross_entropy(bpp[k][i, j].reshape(1, 1), t[i, j].reshape(1, 1))
-            loss += l / (N*(N-1)/2)
-
-        loss = loss / B
+                t[k, i, j] = 1
+        loss = F.sigmoid_cross_entropy(bpp, t)
         reporter.report({'loss': loss}, self)
 
         if self.compute_accuracy:
-            bpp_array = to_cpu(bpp.array)
+            bpp = to_cpu(bpp)
             jobs = [
-                delayed(func)(self.decoder, k, seq, bpp_array[k],)
+                delayed(func)(self.decoder, k, seq, bpp[k],)
                     for k, seq in enumerate(seq_set)
             ]
             r = sorted(Parallel(n_jobs=-1)(jobs))

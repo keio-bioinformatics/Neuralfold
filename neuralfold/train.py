@@ -18,13 +18,16 @@ from .decode.ipknot import IPknot
 from .decode.nussinov import Nussinov
 from .model import load_model
 from .model.cnn import CNN
-from .model.wncnn import WNCNN
-from .model.wncnn2d import WNCNN2D
-from .model.mlp import MLP
-from .model.rnn import RNN
+from .model.resnet import ResNet
+from .model.lstm import LSTM2D
+# from .model.wncnn import WNCNN
+# from .model.wncnn2d import WNCNN2D
+# from .model.mlp import MLP
+# from .model.rnn import RNN
 from .seq import load_seq, load_seq_from_list
 from .structured_loss import StructuredLoss
 from .piecewise_loss import PiecewiseLoss
+from .labelwise_accuracy_loss import LabelwiseAccuracyLoss
 
 class Train:
     def __init__(self, args):
@@ -61,8 +64,6 @@ class Train:
                 self.model = klass(**klass.parse_args(args))
             except KeyError:
                 raise RuntimeError("{} is unknown model class.".format(args.learning_model))
-        if args.gpu >= 0:
-            self.model.to_gpu(args.gpu)
 
         # decoder setup
         if args.decode == 'ipknot':
@@ -76,6 +77,11 @@ class Train:
 
         # loss function setup
         if True:
+            self.net = LabelwiseAccuracyLoss(self.model, decoder, 
+                                        compute_accuracy=self.compute_accuracy,
+                                        verbose=args.verbose, 
+                                        **LabelwiseAccuracyLoss.parse_args(args))
+        elif False:
             self.net = StructuredLoss(self.model, decoder, 
                                     compute_accuracy=self.compute_accuracy,
                                     verbose=args.verbose, 
@@ -85,10 +91,13 @@ class Train:
                                     compute_accuracy=self.compute_accuracy,
                                     verbose=args.verbose, 
                                     **PiecewiseLoss.parse_args(args))
+        if args.gpu >= 0:
+            self.net.to_gpu(args.gpu)
+        
 
         # optmizer setup
         if args.optimizer == 'Adam':
-            self.optimizer = optimizers.Adam(alpha=args.adam_alpha)
+            self.optimizer = optimizers.Adam(alpha=args.adam_alpha, adabound=True)
         elif args.optimizer == 'MomentumSGD':
             self.optimizer = optimizers.MomentumSGD(lr=args.momentum_sgd_lr)
         else:
@@ -128,6 +137,7 @@ class Train:
                 trainer.extend(extensions.PlotReport(plot_f_val_name, 
                                 x_key='epoch', trigger=(1, 'epoch'), file_name='accuracy.png'))
             #trainer.extend(extensions.dump_graph('main/loss'))
+            #trainer.extend(extensions.DumpGraph('main/loss'))
 
 
         if self.resume:
@@ -201,14 +211,18 @@ class Train:
 
         # neural networks architecture
         parser_training.add_argument('-l','--learning-model',
-                                    help='Select a learning model [MLP (default), RNN, CNN, WNCNN, WNCNN2D]',
-                                    choices=('MLP', 'RNN', 'CNN', 'WNCNN', 'WNCNN2D'),
-                                    type=str, default='MLP')
-        MLP.add_args(parser_training)
-        RNN.add_args(parser_training)
+                                    #help='Select a learning model [MLP (default), RNN, CNN, WNCNN, WNCNN2D]',
+                                    #choices=('MLP', 'RNN', 'CNN', 'WNCNN', 'WNCNN2D'),
+                                    help='Select a learning model [CNN (default), ResNet, LSTM2D]',
+                                    choices=('CNN', 'ResNet', 'LSTM2D'),
+                                    type=str, default='CNN')
         CNN.add_args(parser_training)
-        WNCNN.add_args(parser_training)        
-        WNCNN2D.add_args(parser_training)        
+        ResNet.add_args(parser_training)
+        LSTM2D.add_args(parser_training)
+        # MLP.add_args(parser_training)
+        # RNN.add_args(parser_training)
+        # WNCNN.add_args(parser_training)        
+        # WNCNN2D.add_args(parser_training)        
 
         # decoder option
         parser_training.add_argument('-g','--gamma',
